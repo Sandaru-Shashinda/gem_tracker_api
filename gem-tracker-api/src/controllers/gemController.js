@@ -24,14 +24,25 @@ export const getGemById = async (req, res) => {
 // @route   POST /api/gems/intake
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
-  const { weight, color, gemId } = req.body
+  const { color, emeraldWeight, diamondWeight, totalArticleWeight, shape, cut, itemDescription } =
+    req.body
+
+  // Generate unique gem ID if not provided
+  const gemCount = await Gem.countDocuments()
+  const gemId = `GEM-${new Date().getFullYear()}-${(gemCount + 1).toString().padStart(3, "0")}`
 
   const gem = new Gem({
     gemId,
     status: "READY_FOR_T1",
+    color,
+    emeraldWeight,
+    diamondWeight,
+    totalArticleWeight,
+    shape,
+    cut,
+    itemDescription,
+    imageUrl: req.file ? `/uploads/${req.file.filename}` : "",
     intake: {
-      weight,
-      color,
       helperId: req.user._id,
       timestamp: new Date(),
     },
@@ -45,7 +56,7 @@ export const intakeGem = async (req, res) => {
 // @route   PUT /api/gems/:id/test
 // @access  Private/Tester
 export const submitTest = async (req, res) => {
-  const { ri, sg, hardness, notes, selectedVariety } = req.body
+  const { ri, sg, hardness, observations, notes, selectedVariety } = req.body
   const gem = await Gem.findById(req.params.id)
 
   if (gem) {
@@ -54,6 +65,7 @@ export const submitTest = async (req, res) => {
         ri,
         sg,
         hardness,
+        observations,
         notes,
         selectedVariety,
         testerId: req.user._id,
@@ -65,6 +77,7 @@ export const submitTest = async (req, res) => {
         ri,
         sg,
         hardness,
+        observations,
         notes,
         selectedVariety,
         testerId: req.user._id,
@@ -86,7 +99,7 @@ export const submitTest = async (req, res) => {
 // @route   PUT /api/gems/:id/approve
 // @access  Private/Approver
 export const approveGem = async (req, res) => {
-  const { ri, sg, hardness, notes, finalVariety } = req.body
+  const { ri, sg, hardness, finalObservations, finalVariety, itemDescription } = req.body
   const gem = await Gem.findById(req.params.id)
 
   if (gem) {
@@ -94,8 +107,9 @@ export const approveGem = async (req, res) => {
       ri,
       sg,
       hardness,
-      notes,
+      finalObservations,
       finalVariety,
+      itemDescription,
       approverId: req.user._id,
       timestamp: new Date(),
     }

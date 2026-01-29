@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { Microscope, Search, ArrowLeft, ShieldCheck } from "lucide-react"
+import { Microscope, Search, ArrowLeft, ShieldCheck, Activity, Loader2 } from "lucide-react"
 import { MainLayout } from "@/components/layout/MainLayout"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,12 +8,21 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useGem } from "@/hooks/useGemStore"
-import { GEM_REFERENCES, PREDEFINED_SPECIES } from "@/lib/constants"
-import type { GemStatus } from "@/lib/types"
+import { api } from "@/lib/api"
+import type { GemStatus, GemReference } from "@/lib/types"
+import { GemTimeline } from "@/components/features/gems/GemTimeline"
 
 export function GemDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user, gems, handleTestSubmit, handleApproval, handleOverride } = useGem()
+  const {
+    user,
+    gems,
+    references: globalReferences,
+    species: globalSpecies,
+    handleTestSubmit,
+    handleApproval,
+    handleOverride,
+  } = useGem()
   const navigate = useNavigate()
 
   const gem = gems.find((g) => g._id === id)
@@ -40,8 +49,10 @@ export function GemDetailPage() {
 
   const [speciesSearch, setSpeciesSearch] = useState("")
   const [showSpeciesList, setShowSpeciesList] = useState(false)
+  const [suggestions, setSuggestions] = useState<GemReference[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const filteredSpecies = PREDEFINED_SPECIES.filter((s) =>
+  const filteredSpecies = globalSpecies.filter((s) =>
     s.toLowerCase().includes(speciesSearch.toLowerCase()),
   )
 
@@ -69,19 +80,20 @@ export function GemDetailPage() {
 
   // Auto-suggestion Logic
   useEffect(() => {
-    if (formData.ri || formData.sg) {
-      const ri = parseFloat(formData.ri)
-      const sg = parseFloat(formData.sg)
-
-      const matches = GEM_REFERENCES.filter((ref) => {
-        let matchScore = 0
-        if (ri && ri >= ref.riMin - 0.05 && ri <= ref.riMax + 0.05) matchScore++
-        if (sg && sg >= ref.sgMin - 0.2 && sg <= ref.sgMax + 0.2) matchScore++
-        return matchScore > 0
-      })
-      console.log("Suggestions:", matches)
+    const getSuggestions = async () => {
+      if (formData.ri || formData.sg || formData.hardness) {
+        try {
+          const matches = await api.searchReferences(formData.ri, formData.sg, formData.hardness)
+          setSuggestions(matches)
+        } catch (err) {
+          console.error("Failed to get suggestions:", err)
+        }
+      } else {
+        setSuggestions([])
+      }
     }
-  }, [formData.ri, formData.sg])
+    getSuggestions()
+  }, [formData.ri, formData.sg, formData.hardness])
 
   if (!gem) {
     return (
@@ -97,16 +109,23 @@ export function GemDetailPage() {
   }
 
   const canTest = user?.role === "TESTER" || user?.role === "ADMIN"
-  const canApprove = user?.role === "FINAL_APPROVER" || user?.role === "ADMIN"
+  const canApprove = user?.role === "ADMIN"
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isApproval && canApprove) {
-      handleApproval(gem._id, { ...formData })
-      navigate("/queue")
-    } else if (canTest) {
-      handleTestSubmit(gem._id, isT1 ? "test1" : "test2", formData)
-      navigate("/queue")
+    setIsSubmitting(true)
+    try {
+      if (isApproval && canApprove) {
+        await handleApproval(gem._id, { ...formData })
+        navigate("/queue")
+      } else if (canTest) {
+        await handleTestSubmit(gem._id, isT1 ? "test1" : "test2", formData)
+        navigate("/queue")
+      }
+    } catch (error) {
+      console.error("Failed to submit:", error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -160,16 +179,20 @@ export function GemDetailPage() {
             </div>
             <Badge variant={getStatusVariant(gem.status)}>{gem.status.replace(/_/g, " ")}</Badge>
           </div>
-          {gem.status === "COMPLETED" && gem.finalApproval.reportUrl && (
+          {gem.status === "COMPLETED" && (
             <Button
               variant='default'
               className='bg-emerald-600 hover:bg-emerald-700'
-              onClick={() => window.open(`http://localhost:5000${gem.finalApproval.reportUrl}`)}
+              onClick={() => navigate(`/reports/${gem._id}`)}
             >
-              View PDF Report
+              View Report Certificate
             </Button>
           )}
         </div>
+
+        <Card className='p-8 bg-white shadow-sm border-slate-100 overflow-hidden'>
+          <GemTimeline gem={gem} />
+        </Card>
 
         <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
           {/* Left Column: Intake & History */}
@@ -178,6 +201,15 @@ export function GemDetailPage() {
               <h3 className='text-xs font-bold text-slate-500 uppercase tracking-wider mb-4'>
                 Intake Details
               </h3>
+              {gem.imageUrl && (
+                <div className='mb-4 relative aspect-video w-full overflow-hidden rounded-xl border border-slate-200 bg-white'>
+                  <img
+                    src={`${api.BASE_URL}${gem.imageUrl}`}
+                    alt={gem.gemId}
+                    className='h-full w-full object-cover animate-in fade-in zoom-in duration-700'
+                  />
+                </div>
+              )}
               <div className='space-y-3 text-sm'>
                 <div className='flex justify-between border-b border-slate-200 pb-1'>
                   <span className='text-slate-500'>Color:</span>{" "}
@@ -199,6 +231,113 @@ export function GemDetailPage() {
                   <p className='text-[10px] uppercase font-bold text-slate-400 mb-1'>Description</p>
                   <p className='text-xs text-slate-600 leading-relaxed'>{gem.itemDescription}</p>
                 </div>
+              </div>
+            </Card>
+
+            {/* Scientific Suggestions */}
+            <Card className='p-5 bg-blue-50/50 border-blue-100 shadow-md animate-in fade-in slide-in-from-left-4 duration-500'>
+              <div className='flex items-center gap-2 mb-4'>
+                <div className='p-1.5 bg-blue-100 rounded-lg'>
+                  <Activity size={16} className='text-blue-600' />
+                </div>
+                <h3 className='text-xs font-bold text-blue-800 uppercase tracking-wider'>
+                  Scientific Suggestions
+                </h3>
+              </div>
+
+              <p className='text-[10px] text-blue-600 mb-3 leading-relaxed'>
+                Matching species based on current RI, SG, and Hardness readings:
+              </p>
+
+              <div className='space-y-2'>
+                {suggestions.length > 0 ? (
+                  <>
+                    {suggestions.slice(0, 5).map((s, i) => (
+                      <button
+                        key={i}
+                        type='button'
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            species: s.species || "",
+                            selectedVariety: s.variety,
+                            hardness:
+                              s.hardnessMin?.toString() ||
+                              s.hardnessMax?.toString() ||
+                              formData.hardness,
+                          })
+                          setSpeciesSearch(s.species || "")
+                        }}
+                        className='w-full text-left p-3 bg-white border border-blue-100 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all group relative overflow-hidden'
+                      >
+                        <div className='absolute top-0 right-0 p-1'>
+                          <Badge
+                            variant='outline'
+                            className='text-[7px] h-3 bg-blue-50 border-blue-100 text-blue-600 font-bold px-1'
+                          >
+                            MATCH
+                          </Badge>
+                        </div>
+                        <div className='flex flex-col'>
+                          <p className='text-xs font-black text-slate-800 group-hover:text-blue-700 font-serif transition-colors'>
+                            {s.variety}
+                          </p>
+                          <p className='text-[10px] text-slate-500 italic opacity-80 mb-2'>
+                            {s.species || "Unknown Species"}
+                          </p>
+                          <div className='flex flex-wrap gap-x-3 gap-y-1 mt-1 pt-1 border-t border-blue-50/50'>
+                            <div className='flex flex-col'>
+                              <span className='text-[8px] font-bold text-slate-400 uppercase leading-none'>
+                                R.I.
+                              </span>
+                              <span className='text-[9px] font-bold text-blue-700'>
+                                {s.refractiveIndexMin}
+                                {s.refractiveIndexMax !== s.refractiveIndexMin
+                                  ? ` - ${s.refractiveIndexMax}`
+                                  : ""}
+                              </span>
+                            </div>
+                            <div className='flex flex-col'>
+                              <span className='text-[8px] font-bold text-slate-400 uppercase leading-none'>
+                                S.G.
+                              </span>
+                              <span className='text-[9px] font-bold text-blue-700'>
+                                {s.specificGravityMin}
+                                {s.specificGravityMax !== s.specificGravityMin
+                                  ? ` - ${s.specificGravityMax}`
+                                  : ""}
+                              </span>
+                            </div>
+                            <div className='flex flex-col'>
+                              <span className='text-[8px] font-bold text-slate-400 uppercase leading-none'>
+                                H
+                              </span>
+                              <span className='text-[9px] font-bold text-blue-700'>
+                                {s.hardnessMin}
+                                {s.hardnessMax !== s.hardnessMin ? ` - ${s.hardnessMax}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    {suggestions.length > 5 && (
+                      <p className='text-[9px] text-center text-slate-400 pt-1 italic'>
+                        + {suggestions.length - 5} more scientific matches
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className='py-8 text-center border-2 border-dashed border-blue-100 rounded-2xl bg-white/40 animate-in fade-in duration-700'>
+                    <Search className='mx-auto h-8 w-8 text-blue-200 mb-2' />
+                    <p className='text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]'>
+                      No matching gems found
+                    </p>
+                    <p className='text-[9px] text-blue-300 mt-1 italic'>
+                      Enter Scientific Data to see suggestions
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -428,7 +567,7 @@ export function GemDetailPage() {
                             required
                           >
                             <option value=''>Select Variety...</option>
-                            {GEM_REFERENCES.map((g, i) => (
+                            {globalReferences.map((g, i) => (
                               <option key={i} value={g.variety}>
                                 {g.variety}
                               </option>
@@ -532,8 +671,15 @@ export function GemDetailPage() {
                       type='submit'
                       className='flex-1 h-12 text-lg font-bold'
                       variant={isApproval ? "default" : "secondary"}
+                      disabled={isSubmitting}
                     >
-                      {isApproval ? "Finalize Certificate" : "Submit Lab Analysis"}
+                      {isSubmitting ? (
+                        <Loader2 className='animate-spin h-6 w-6' />
+                      ) : isApproval ? (
+                        "Finalize Certificate"
+                      ) : (
+                        "Submit Lab Analysis"
+                      )}
                     </Button>
 
                     {user?.role === "ADMIN" && (
@@ -711,11 +857,9 @@ export function GemDetailPage() {
                     <Button
                       variant='outline'
                       className='mr-auto'
-                      onClick={() =>
-                        window.open(`http://localhost:5000${gem.finalApproval.reportUrl}`)
-                      }
+                      onClick={() => navigate(`/reports/${gem._id}`)}
                     >
-                      View PDF
+                      View Certificate
                     </Button>
                     <div className='flex items-center gap-2 bg-red-50 px-5 py-2.5 rounded-xl border border-red-100'>
                       <ShieldCheck size={18} className='text-red-600' />

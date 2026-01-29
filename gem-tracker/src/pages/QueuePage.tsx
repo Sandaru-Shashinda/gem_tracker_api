@@ -10,8 +10,6 @@ export function QueuePage() {
     if (user?.role === "ADMIN") return gems
     if (user?.role === "TESTER")
       return gems.filter((g) => g.status === "READY_FOR_T1" || g.status === "READY_FOR_T2")
-    if (user?.role === "FINAL_APPROVER")
-      return gems.filter((g) => g.status === "READY_FOR_APPROVAL")
     if (user?.role === "HELPER") return gems
     return []
   }, [gems, user])

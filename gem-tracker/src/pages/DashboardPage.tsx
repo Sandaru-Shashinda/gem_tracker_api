@@ -7,6 +7,7 @@ import { FileText, Activity, CheckCircle, AlertCircle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useGem } from "@/hooks/useGemStore"
+import { api } from "@/lib/api"
 import type { GemStatus } from "@/lib/types"
 
 export function DashboardPage() {
@@ -21,7 +22,7 @@ export function DashboardPage() {
         if (user?.role === "HELPER") return g.status === "INTAKE"
         if (user?.role === "TESTER")
           return g.status === "READY_FOR_T1" || g.status === "READY_FOR_T2"
-        if (user?.role === "FINAL_APPROVER") return g.status === "READY_FOR_APPROVAL"
+        if (user?.role === "ADMIN") return g.status === "READY_FOR_APPROVAL"
         return false
       }).length,
     }
@@ -69,15 +70,31 @@ export function DashboardPage() {
                 {gems.slice(0, 5).map((gem) => (
                   <div
                     key={gem._id}
-                    className='flex items-center justify-between py-2 border-b border-slate-100 last:border-0'
+                    className='flex items-center gap-3 py-2 border-b border-slate-100 last:border-0'
                   >
-                    <div>
-                      <p className='font-medium text-slate-800'>{gem.gemId}</p>
-                      <p className='text-xs text-slate-500'>
-                        {new Date(gem.updatedAt).toLocaleString()}
+                    <div className='h-10 w-10 shrink-0 rounded bg-slate-100 overflow-hidden border border-slate-200'>
+                      {gem.imageUrl ? (
+                        <img
+                          src={`${api.BASE_URL}${gem.imageUrl}`}
+                          alt={gem.gemId}
+                          className='h-full w-full object-cover'
+                        />
+                      ) : (
+                        <div className='h-full w-full flex items-center justify-center text-slate-300'>
+                          <FileText size={16} />
+                        </div>
+                      )}
+                    </div>
+                    <div className='flex-1 min-w-0'>
+                      <p className='font-medium text-slate-800 truncate'>{gem.gemId}</p>
+                      <p className='text-[10px] text-slate-500'>
+                        {new Date(gem.updatedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </p>
                     </div>
-                    <Badge variant={getStatusVariant(gem.status)}>
+                    <Badge variant={getStatusVariant(gem.status)} className='text-[10px] px-1.5'>
                       {gem.status.replace(/_/g, " ")}
                     </Badge>
                   </div>

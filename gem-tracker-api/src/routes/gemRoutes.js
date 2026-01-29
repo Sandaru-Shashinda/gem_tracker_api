@@ -7,16 +7,17 @@ import {
   approveGem,
 } from "../controllers/gemController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
+import upload from "../middleware/uploadMiddleware.js"
 
-const router = express.Router()
+const gemRoutes = express.Router()
 
-router.route("/").get(protect, getGems)
+gemRoutes.route("/").get(protect, getGems)
 
-router.post("/intake", protect, authorize("HELPER", "ADMIN"), intakeGem)
+gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), upload.single("image"), intakeGem)
 
-router.route("/:id").get(protect, getGemById)
+gemRoutes.route("/:id").get(protect, getGemById)
 
-router.put("/:id/test", protect, authorize("TESTER", "ADMIN"), submitTest)
-router.put("/:id/approve", protect, authorize("FINAL_APPROVER", "ADMIN"), approveGem)
+gemRoutes.put("/:id/test", protect, authorize("TESTER", "ADMIN"), submitTest)
+gemRoutes.put("/:id/approve", protect, authorize("ADMIN"), approveGem)
 
-export default router
+export default gemRoutes

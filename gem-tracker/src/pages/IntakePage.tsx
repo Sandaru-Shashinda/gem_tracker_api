@@ -16,13 +16,37 @@ export function IntakePage() {
     color: "",
     itemDescription: "",
   })
+  const [image, setImage] = useState<File | null>(null)
+
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const { handleIntake } = useGem()
   const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImage(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    handleIntake(formData)
-    navigate("/queue")
+    setIsSubmitting(true)
+    try {
+      await handleIntake(formData, image || undefined)
+      navigate("/queue")
+    } catch (error) {
+      console.error("Failed to intake gem:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -92,10 +116,25 @@ export function IntakePage() {
               />
             </div>
 
+            <div className='space-y-2'>
+              <label className='text-sm font-medium'>Gem Image</label>
+              <Input
+                type='file'
+                accept='image/*'
+                onChange={handleImageChange}
+                className='cursor-pointer'
+              />
+              {imagePreview && (
+                <div className='mt-2 relative aspect-video w-full overflow-hidden rounded-lg border border-slate-200'>
+                  <img src={imagePreview} alt='Preview' className='h-full w-full object-cover' />
+                </div>
+              )}
+            </div>
+
             <div className='pt-4'>
-              <Button type='submit' className='w-full'>
+              <Button type='submit' className='w-full' disabled={isSubmitting}>
                 <Plus size={18} className='mr-2' />
-                Add to Workflow
+                {isSubmitting ? "Processing..." : "Add to Workflow"}
               </Button>
             </div>
           </form>

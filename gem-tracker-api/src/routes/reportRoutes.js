@@ -2,9 +2,9 @@ import express from "express"
 import { generateReport, verifyReport } from "../controllers/reportController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
-const router = express.Router()
+const reportRoutes = express.Router()
 
-router.post("/:id/generate", protect, authorize("FINAL_APPROVER", "ADMIN"), generateReport)
-router.get("/:id/verify", verifyReport)
+reportRoutes.post("/:id/generate", protect, authorize("ADMIN"), generateReport)
+reportRoutes.get("/:id/verify", verifyReport)
 
-export default router
+export default reportRoutes

@@ -7,10 +7,16 @@ const UserSchema = new mongoose.Schema(
     password: { type: String, required: true },
     role: {
       type: String,
-      enum: ["ADMIN", "HELPER", "TESTER", "FINAL_APPROVER"],
+      enum: ["ADMIN", "HELPER", "TESTER"],
       required: true,
     },
     name: String,
+    age: Number,
+    dob: Date,
+    idNumber: String,
+    address: String,
+    email: String,
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true },
 )

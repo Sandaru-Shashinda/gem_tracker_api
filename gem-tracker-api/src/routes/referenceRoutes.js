@@ -1,10 +1,17 @@
 import express from "express"
-import { searchReferences, seedReferences } from "../controllers/referenceController.js"
+import {
+  searchReferences,
+  seedReferences,
+  getAllReferences,
+  getAllSpecies,
+} from "../controllers/referenceController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
-const router = express.Router()
+const referenceRoutes = express.Router()
 
-router.get("/search", protect, searchReferences)
-router.post("/seed", protect, authorize("ADMIN"), seedReferences)
+referenceRoutes.get("/", protect, getAllReferences)
+referenceRoutes.get("/species", protect, getAllSpecies)
+referenceRoutes.get("/search", protect, searchReferences)
+referenceRoutes.post("/seed", protect, authorize("ADMIN"), seedReferences)
 
-export default router
+export default referenceRoutes

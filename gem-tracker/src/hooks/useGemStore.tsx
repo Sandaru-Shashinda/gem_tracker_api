@@ -1,22 +1,31 @@
 import { createContext, useContext, useState, useEffect } from "react"
 import type { ReactNode } from "react"
-import type { User, Gem } from "@/lib/types"
+import type { User, Gem, GemReference } from "@/lib/types"
 import { api } from "@/lib/api"
 
 interface GemContextType {
   user: User | null
   setUser: (user: User | null) => void
   loading: boolean
+  refreshing: boolean
   gems: Gem[]
+  references: GemReference[]
+  species: string[]
   refreshGems: () => Promise<void>
-  handleIntake: (data: {
-    color: string
-    emeraldWeight: string
-    diamondWeight: string
-    totalArticleWeight: string
-    itemDescription: string
-  }) => Promise<void>
+  refreshReferences: () => Promise<void>
+  refreshSpecies: () => Promise<void>
+  handleIntake: (
+    data: {
+      color: string
+      emeraldWeight: string
+      diamondWeight: string
+      totalArticleWeight: string
+      itemDescription: string
+    },
+    image?: File,
+  ) => Promise<void>
   handleTestSubmit: (gemId: string, stage: "test1" | "test2", data: any) => Promise<void>
+
   handleApproval: (gemId: string, data: any) => Promise<void>
   handleOverride: (gemId: string, status: any) => Promise<void>
 }
@@ -26,7 +35,10 @@ const GemContext = createContext<GemContextType | undefined>(undefined)
 export function GemProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(api.getCurrentUser())
   const [gems, setGems] = useState<Gem[]>([])
+  const [references, setReferences] = useState<GemReference[]>([])
+  const [species, setSpecies] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const setUser = (u: User | null) => {
     if (!u) api.logout()
@@ -34,35 +46,72 @@ export function GemProvider({ children }: { children: ReactNode }) {
   }
 
   const refreshGems = async () => {
-    setLoading(true)
+    setRefreshing(true)
     try {
       const data = await api.getGems()
       setGems(data)
+    } catch (err) {
+      console.error("Failed to fetch gems:", err)
     } finally {
-      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  const refreshReferences = async () => {
+    setRefreshing(true)
+    try {
+      const data = await api.getReferences()
+      setReferences(data)
+    } catch (err) {
+      console.error("Failed to fetch references:", err)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const refreshSpecies = async () => {
+    setRefreshing(true)
+    try {
+      const data = await api.getSpecies()
+      setSpecies(data)
+    } catch (err) {
+      console.error("Failed to fetch species:", err)
+    } finally {
+      setRefreshing(false)
     }
   }
 
   useEffect(() => {
-    refreshGems()
+    const init = async () => {
+      setLoading(true)
+      await Promise.all([refreshGems(), refreshReferences(), refreshSpecies()])
+      setLoading(false)
+    }
+    init()
   }, [])
 
-  const handleIntake = async (data: {
-    color: string
-    emeraldWeight: string
-    diamondWeight: string
-    totalArticleWeight: string
-    itemDescription: string
-  }) => {
+  const handleIntake = async (
+    data: {
+      color: string
+      emeraldWeight: string
+      diamondWeight: string
+      totalArticleWeight: string
+      itemDescription: string
+    },
+    image?: File,
+  ) => {
     if (!user) return
-    const intakePayload = {
-      color: data.color,
-      emeraldWeight: parseFloat(data.emeraldWeight),
-      diamondWeight: parseFloat(data.diamondWeight),
-      totalArticleWeight: parseFloat(data.totalArticleWeight),
-      itemDescription: data.itemDescription,
+    const formData = new FormData()
+    formData.append("color", data.color)
+    formData.append("emeraldWeight", data.emeraldWeight)
+    formData.append("diamondWeight", data.diamondWeight)
+    formData.append("totalArticleWeight", data.totalArticleWeight)
+    formData.append("itemDescription", data.itemDescription)
+    if (image) {
+      formData.append("image", image)
     }
-    await api.createGem(intakePayload)
+
+    await api.createGem(formData)
     await refreshGems()
   }
 
@@ -117,12 +166,24 @@ export function GemProvider({ children }: { children: ReactNode }) {
       },
     }
     await api.updateGem(gemId, { finalApproval: update, status: "COMPLETED" })
+    try {
+      await api.generateReport(gemId)
+    } catch (err) {
+      console.error("Failed to generate report:", err)
+    }
     await refreshGems()
   }
 
   const handleOverride = async (gemId: string, status: any) => {
-    await api.updateGem(gemId, { status })
-    await refreshGems()
+    setRefreshing(true)
+    try {
+      await api.updateGem(gemId, { status })
+      await refreshGems()
+    } catch (err) {
+      console.error("Failed to override status:", err)
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   return (
@@ -131,8 +192,13 @@ export function GemProvider({ children }: { children: ReactNode }) {
         user,
         setUser,
         loading,
+        refreshing,
         gems,
+        references,
+        species,
         refreshGems,
+        refreshReferences,
+        refreshSpecies,
         handleIntake,
         handleTestSubmit,
         handleApproval,

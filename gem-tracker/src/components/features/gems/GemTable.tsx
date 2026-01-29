@@ -3,6 +3,7 @@ import { Search } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { api } from "@/lib/api"
 import type { Gem, GemStatus } from "@/lib/types"
 
 interface GemTableProps {
@@ -32,6 +33,9 @@ export function GemTable({ gems }: GemTableProps) {
         <thead className='bg-slate-50'>
           <tr>
             <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider'>
+              Image
+            </th>
+            <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider'>
               Gem ID
             </th>
             <th className='px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider'>
@@ -51,6 +55,21 @@ export function GemTable({ gems }: GemTableProps) {
         <tbody className='bg-white divide-y divide-slate-200'>
           {gems.map((gem) => (
             <tr key={gem._id} className='hover:bg-slate-50 transition-colors'>
+              <td className='px-6 py-4 whitespace-nowrap'>
+                {gem.imageUrl ? (
+                  <div className='h-12 w-12 rounded-lg overflow-hidden border border-slate-200'>
+                    <img
+                      src={`${api.BASE_URL}${gem.imageUrl}`}
+                      alt={gem.gemId}
+                      className='h-full w-full object-cover'
+                    />
+                  </div>
+                ) : (
+                  <div className='h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400'>
+                    <Search className='w-4 h-4' />
+                  </div>
+                )}
+              </td>
               <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900'>
                 {gem.gemId}
               </td>
@@ -59,6 +78,7 @@ export function GemTable({ gems }: GemTableProps) {
                   {gem.status.replace(/_/g, " ")}
                 </Badge>
               </td>
+
               <td className='px-6 py-4 whitespace-nowrap text-sm text-slate-500'>
                 {gem.color} / {gem.emeraldWeight}ct
               </td>

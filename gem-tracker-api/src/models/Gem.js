@@ -17,6 +17,7 @@ const GemSchema = new mongoose.Schema(
     shape: String,
     cut: String,
     itemDescription: String, // Full textual description
+    imageUrl: String,
 
     // Intake specific
     intake: {
