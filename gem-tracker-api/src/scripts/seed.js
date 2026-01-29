@@ -19,25 +19,21 @@ const seedData = async () => {
     // Create users
     const users = [
       {
-        username: "admin",
         password: "password123",
         name: "Alice Admin",
         role: "ADMIN",
       },
       {
-        username: "helper",
         password: "password123",
         name: "Harry Helper",
         role: "HELPER",
       },
       {
-        username: "tester",
         password: "password123",
         name: "Tom Tester",
         role: "TESTER",
       },
       {
-        username: "tester2",
         password: "password123",
         name: "Tim Tester",
         role: "TESTER",

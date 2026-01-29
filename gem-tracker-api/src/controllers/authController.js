@@ -5,19 +5,19 @@ import generateToken from "../utils/generateToken.js"
 // @route   POST /api/auth/login
 // @access  Public
 export const loginUser = async (req, res) => {
-  const { username, password } = req.body
-  const user = await User.findOne({ username, isDeleted: { $ne: true } })
+  const { email, password } = req.body
+  const user = await User.findOne({ email, isDeleted: { $ne: true } })
 
   if (user && (await user.matchPassword(password))) {
     res.json({
       _id: user._id,
       name: user.name,
-      username: user.username,
+      email: user.email,
       role: user.role,
       token: generateToken(user._id),
     })
   } else {
-    res.status(401).json({ message: "Invalid username or password" })
+    res.status(401).json({ message: "Invalid email or password" })
   }
 }
 
@@ -25,14 +25,14 @@ export const loginUser = async (req, res) => {
 // @route   POST /api/auth/register
 // @access  Private/Admin
 export const registerUser = async (req, res) => {
-  const { username, password, role, name, age, dob, idNumber, address, email } = req.body
+  const { password, role, name, age, dob, idNumber, address, email } = req.body
 
-  const userExists = await User.findOne({ username })
+  const userExists = await User.findOne({ email })
 
   if (userExists) {
     if (userExists.isDeleted) {
       // Re-activate deleted user if needed, or just error
-      res.status(400).json({ message: "Username already exists (deactivated account)" })
+      res.status(400).json({ message: "Email already exists (deactivated account)" })
       return
     }
     res.status(400).json({ message: "User already exists" })
@@ -40,7 +40,6 @@ export const registerUser = async (req, res) => {
   }
 
   const user = await User.create({
-    username,
     password,
     role,
     name,
@@ -55,7 +54,6 @@ export const registerUser = async (req, res) => {
     res.status(201).json({
       _id: user._id,
       name: user.name,
-      username: user.username,
       role: user.role,
       age: user.age,
       dob: user.dob,
@@ -78,7 +76,6 @@ export const getUserProfile = async (req, res) => {
     res.json({
       _id: user._id,
       name: user.name,
-      username: user.username,
       role: user.role,
       age: user.age,
       dob: user.dob,
@@ -123,7 +120,6 @@ export const updateUser = async (req, res) => {
     res.json({
       _id: updatedUser._id,
       name: updatedUser.name,
-      username: updatedUser.username,
       role: updatedUser.role,
       age: updatedUser.age,
       dob: updatedUser.dob,

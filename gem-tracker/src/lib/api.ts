@@ -1,5 +1,4 @@
 import type { User, Gem, GemReference } from "./types"
-import { MOCK_USERS } from "./constants"
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
     ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
@@ -14,22 +13,21 @@ const getAuthHeader = (): Record<string, string> => {
 export const api = {
     BASE_URL,
     // --- Auth ---
-    login: async (username: string, password: string = "password123"): Promise<User> => {
+    login: async (email: string, password: string): Promise<User> => {
         const response = await fetch(`${API_BASE_URL}/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ email, password }),
         })
 
         if (!response.ok) {
-            throw new Error("Invalid username or password")
+            throw new Error("Invalid email or password")
         }
 
         const data = await response.json()
         const user: User = {
             id: data._id,
             name: data.name,
-            username: data.username,
             role: data.role,
             age: data.age,
             dob: data.dob,
@@ -159,17 +157,10 @@ export const api = {
         const response = await fetch(`${API_BASE_URL}/auth/users`, {
             headers: getAuthHeader(),
         })
-        if (!response.ok) {
-            // For now, if /auth/users doesn't exist or fails, return MOCK_USERS
-            // but ideally we should have a real endpoint.
-            // Looking at authRoutes.js, there is no /users endpoint yet.
-            return MOCK_USERS
-        }
         const data = await response.json()
         return data.map((u: any) => ({
             id: u._id,
             name: u.name,
-            username: u.username,
             role: u.role,
             age: u.age,
             dob: u.dob,
@@ -197,7 +188,6 @@ export const api = {
         return {
             id: data._id,
             name: data.name,
-            username: data.username,
             role: data.role,
             age: data.age,
             dob: data.dob,
@@ -214,7 +204,7 @@ export const api = {
 
     updateUser: async (userId: string, updates: Partial<User>): Promise<User> => {
         const response = await fetch(`${API_BASE_URL}/auth/users/${userId}`, {
-            method: "PUT",
+            method: "POST",
             headers: {
                 ...getAuthHeader(),
                 "Content-Type": "application/json",
@@ -226,7 +216,6 @@ export const api = {
         return {
             id: data._id,
             name: data.name,
-            username: data.username,
             role: data.role,
             age: data.age,
             dob: data.dob,
@@ -234,7 +223,6 @@ export const api = {
             address: data.address,
             email: data.email,
             avatar: data.name
-
                 .split(" ")
                 .map((n: string) => n[0])
                 .join(""),
