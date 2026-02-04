@@ -1,7 +1,9 @@
 import Gem from "../models/Gem.js"
 import { deleteFromDrive } from "../utils/googleDriveService.js"
 import { generateGemId, handleImageUpload, buildGemQuery } from "../services/gem.service.js"
-import { GEM_STATUSES, ROLES } from "../const/const.js"
+import { GEM_STATUSES, ROLES, REPORT_TYPES } from "../const/const.js"
+import Report from "../models/Report.js"
+import { generateReportId } from "../services/report.service.js"
 
 // @desc    Get all gems
 // @route   GET /api/gems
@@ -280,8 +282,31 @@ export const updateFinalApproval = async (req, res) => {
     gem.finalApproval = finalData
 
     // Status transition
-    if (status) gem.status = status
-    else gem.status = GEM_STATUSES.DRAFT_APPROVAL
+    if (status) {
+      gem.status = status
+
+      // Auto-generate report entry if submitted for report
+      if (status === GEM_STATUSES.SUBMITTED_FOR_REPORT) {
+        // Check if report already exists
+        const existingReport = await Report.findOne({ gemId: gem._id })
+
+        if (!existingReport) {
+          const reportId = await generateReportId()
+
+          const newReport = new Report({
+            gemId: gem._id,
+            reportType: REPORT_TYPES.SMALL, // Default type
+            reportId,
+            issuedDate: new Date(),
+          })
+
+          const savedReport = await newReport.save()
+          gem.reportId = savedReport._id
+        }
+      }
+    } else {
+      gem.status = GEM_STATUSES.DRAFT_APPROVAL
+    }
 
     const updatedGem = await gem.save()
     await updatedGem.populate("finalApproval.approverId", "name role")

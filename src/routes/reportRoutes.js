@@ -5,6 +5,7 @@ import {
   getReports,
   getReportById,
   deleteReport,
+  updateReport,
 } from "../controllers/reportController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
@@ -16,7 +17,8 @@ reportRoutes.get("/:reportId/verify", verifyReport)
 
 reportRoutes
   .route("/:id")
-  .get(protect, getReportById)
+  .get(getReportById)
+  .put(protect, authorize("ADMIN"), updateReport)
   .delete(protect, authorize("ADMIN"), deleteReport)
 
 reportRoutes.post("/:id/generate", protect, authorize("ADMIN"), generateReport)

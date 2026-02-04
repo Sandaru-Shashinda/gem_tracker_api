@@ -29,6 +29,10 @@ const reportSchema = new mongoose.Schema(
     reportUrl: {
       type: String,
     },
+    isClientDataAdd: {
+      type: Boolean,
+      default: false,
+    },
   },
 
   { timestamps: true },

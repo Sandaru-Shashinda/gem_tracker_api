@@ -164,3 +164,22 @@ export const deleteReport = async (req, res) => {
     res.status(500).json({ message: "Error deleting report", error: error.message })
   }
 }
+
+// @desc    Update a report
+// @route   PUT /api/reports/:id
+// @access  Private/Admin
+export const updateReport = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id)
+    if (!report) return res.status(404).json({ message: "Report not found" })
+
+    const updatedReport = await Report.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    })
+
+    res.json(updatedReport)
+  } catch (error) {
+    res.status(500).json({ message: "Error updating report", error: error.message })
+  }
+}
