@@ -1,6 +1,7 @@
 import express from "express"
 import {
   getGems,
+  getDashboardStats,
   getGemById,
   intakeGem,
   updateGem,
@@ -15,6 +16,7 @@ import upload from "../middleware/uploadMiddleware.js"
 const gemRoutes = express.Router()
 
 gemRoutes.route("/").get(protect, getGems)
+gemRoutes.get("/stats", protect, getDashboardStats)
 
 gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), upload.single("image"), intakeGem)
 

@@ -36,6 +36,37 @@ export const getGems = async (req, res) => {
   }
 }
 
+// @desc    Get dashboard statistics
+// @route   GET /api/gems/stats
+// @access  Private
+export const getDashboardStats = async (req, res) => {
+  try {
+    const userId = req.user._id
+
+    const totalGems = await Gem.countDocuments()
+    const pendingWorkflow = await Gem.countDocuments({ status: { $ne: GEM_STATUSES.DONE } })
+    const completedGems = await Gem.countDocuments({ status: GEM_STATUSES.DONE })
+    const myActionItems = await Gem.countDocuments({ currentAssignee: userId })
+
+    const recentGems = await Gem.find()
+      .populate("currentAssignee", "name role")
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .lean()
+
+    res.json({
+      totalGems,
+      pendingWorkflow,
+      completedGems,
+      myActionItems,
+      recentGems,
+    })
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error)
+    res.status(500).json({ message: "Error fetching dashboard stats", error: error.message })
+  }
+}
+
 // @desc    Get gem by ID
 // @route   GET /api/gems/:id
 // @access  Private

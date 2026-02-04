@@ -1,9 +1,6 @@
 import Report from "../models/Report.js"
 import Gem from "../models/Gem.js"
-import { generateQRCode } from "../utils/qrGenerator.js"
-import { createPDFReport } from "../utils/pdfGenerator.js"
-import { generateReportId } from "../services/report.service.js"
-import { REPORT_TYPES } from "../const/const.js"
+import { GEM_STATUSES } from "../const/const.js"
 
 // @desc    Get all reports
 // @route   GET /api/reports
@@ -15,7 +12,7 @@ export const getReports = async (req, res) => {
 
     const count = await Report.countDocuments()
     const reports = await Report.find()
-      .populate("gemId", "gemId color weight")
+      .populate("gemId", "gemId color weight status")
       .sort({ createdAt: -1 })
       .limit(pageSize)
       .skip(pageSize * (page - 1))
@@ -41,65 +38,6 @@ export const getReportById = async (req, res) => {
     res.json(report)
   } catch (error) {
     res.status(500).json({ message: "Error fetching report", error: error.message })
-  }
-}
-
-// @desc    Generate a report for a completed gem
-// @route   POST /api/reports/:id/generate
-// @access  Private/Admin
-export const generateReport = async (req, res) => {
-  try {
-    const { reportType } = req.body
-
-    if (!reportType || !Object.values(REPORT_TYPES).includes(reportType)) {
-      return res.status(400).json({ message: "Invalid report type" })
-    }
-
-    const gem = await Gem.findById(req.params.id)
-
-    if (!gem) {
-      return res.status(404).json({ message: "Gem not found" })
-    }
-
-    if (gem.status !== "COMPLETED" && gem.status !== "DONE") {
-      return res
-        .status(400)
-        .json({ message: "Gem workflow must be completed before generating report" })
-    }
-
-    // 1. Generate Report ID
-    const reportId = await generateReportId()
-
-    // 2. Generate QR Code pointing to digital report URL
-    const publicUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`
-    const verificationUrl = `${publicUrl}/api/reports/${reportId}/verify`
-    const qrDataUrl = await generateQRCode(verificationUrl)
-
-    // 3. Generate PDF (Pass QR code separately since it's not on gem anymore)
-    const reportPath = await createPDFReport(gem, qrDataUrl)
-
-    // 4. Create Report record
-    const report = new Report({
-      gemId: gem._id,
-      reportType,
-      qrCode: qrDataUrl,
-      reportId,
-      reportUrl: reportPath, // We should add this field to the model if not there
-    })
-
-    const savedReport = await report.save()
-
-    // 5. Update Gem with report reference
-    gem.reportId = savedReport._id
-    await gem.save()
-
-    res.status(201).json({
-      message: "Report generated successfully",
-      report: savedReport,
-    })
-  } catch (error) {
-    console.error("Error generating report:", error)
-    res.status(500).json({ message: "Error generating report", error: error.message })
   }
 }
 
@@ -177,6 +115,9 @@ export const updateReport = async (req, res) => {
       new: true,
       runValidators: true,
     })
+
+    // Update associated Gem status to DONE
+    await Gem.findByIdAndUpdate(report.gemId, { status: GEM_STATUSES.DONE })
 
     res.json(updatedReport)
   } catch (error) {

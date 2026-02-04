@@ -1,6 +1,5 @@
 import express from "express"
 import {
-  generateReport,
   verifyReport,
   getReports,
   getReportById,
@@ -20,7 +19,5 @@ reportRoutes
   .get(getReportById)
   .put(protect, authorize("ADMIN"), updateReport)
   .delete(protect, authorize("ADMIN"), deleteReport)
-
-reportRoutes.post("/:id/generate", protect, authorize("ADMIN"), generateReport)
 
 export default reportRoutes
