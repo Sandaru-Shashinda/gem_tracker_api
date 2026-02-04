@@ -8,21 +8,6 @@ export const generateGemId = async () => {
   return `GEM-${new Date().getFullYear()}-${(gemCount + 1).toString().padStart(3, "0")}`
 }
 
-export const saveTestHistory = (testData) => {
-  if (!testData || !testData.timestamp) return null
-
-  return {
-    ri: testData.ri,
-    sg: testData.sg,
-    hardness: testData.hardness,
-    selectedVariety: testData.selectedVariety,
-    observations: testData.observations,
-    notes: testData.notes,
-    testerId: testData.testerId,
-    timestamp: testData.timestamp,
-  }
-}
-
 export const handleImageUpload = async (file, existingFileId = null) => {
   if (!file) return { imageUrl: "", googleDriveFileId: "" }
 
@@ -55,7 +40,14 @@ export const buildGemQuery = (queryParams, user) => {
   // Enforce assignee filter for TESTER role
   if (user?.role === ROLES.TESTER) {
     query.currentAssignee = user._id
-    query.status = { $in: [GEM_STATUSES.READY_FOR_T1, GEM_STATUSES.READY_FOR_T2] }
+    query.status = {
+      $in: [
+        GEM_STATUSES.READY_FOR_T1,
+        GEM_STATUSES.READY_FOR_T2,
+        GEM_STATUSES.DRAFT_TEST_1,
+        GEM_STATUSES.DRAFT_TEST_2,
+      ],
+    }
   }
 
   // Filter by Status
@@ -95,8 +87,8 @@ export const validateTestInput = (data) => {
   if (!data.hardness || typeof data.hardness !== "number") {
     errors.push("Valid hardness is required")
   }
-  if (!data.selectedVariety) {
-    errors.push("Selected variety is required")
+  if (!data.observations?.variety) {
+    errors.push("Variety is required")
   }
 
   return errors

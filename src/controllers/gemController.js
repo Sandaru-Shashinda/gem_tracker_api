@@ -1,12 +1,6 @@
 import Gem from "../models/Gem.js"
 import { deleteFromDrive } from "../utils/googleDriveService.js"
-import {
-  generateGemId,
-  saveTestHistory,
-  handleImageUpload,
-  buildGemQuery,
-  validateTestInput,
-} from "../services/gem.service.js"
+import { generateGemId, handleImageUpload, buildGemQuery } from "../services/gem.service.js"
 import { GEM_STATUSES, ROLES } from "../const/const.js"
 
 // @desc    Get all gems
@@ -75,44 +69,23 @@ export const getGemById = async (req, res) => {
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
   try {
-    const {
-      color,
-      emeraldWeight,
-      diamondWeight,
-      totalArticleWeight,
-      shape,
-      cut,
-      itemDescription,
-      testerId1,
-      testerId2,
-      customerId,
-      status,
-    } = req.body
+    const { color, weight, itemDescription, testerId1, testerId2, customerId, status } = req.body
 
     // Validation
-    if (
-      status !== GEM_STATUSES.DRAFT_INTAKE &&
-      (!color || !emeraldWeight || !totalArticleWeight || !testerId1 || !testerId2)
-    ) {
+    if (status !== GEM_STATUSES.DRAFT_INTAKE && (!color || !weight || !testerId1 || !testerId2)) {
       return res.status(400).json({
-        message: "Missing required fields: color, emeraldWeight, totalArticleWeight, shape, cut",
+        message: "Missing required fields: color, weight, testerId1, testerId2",
       })
     }
 
     const gemId = await generateGemId()
     const imageData = await handleImageUpload(req.file)
 
-    console.log(req.body)
-
     const gem = new Gem({
       gemId,
       status,
       color,
-      emeraldWeight: emeraldWeight ? Number(emeraldWeight) : null,
-      diamondWeight: diamondWeight ? Number(diamondWeight) : null,
-      totalArticleWeight: totalArticleWeight ? Number(totalArticleWeight) : null,
-      shape,
-      cut,
+      weight: weight ? Number(weight) : null,
       itemDescription,
       imageUrl: imageData.imageUrl,
       googleDriveFileId: imageData.googleDriveFileId,
@@ -160,21 +133,17 @@ export const updateGem = async (req, res) => {
     // Mapping tester IDs from frontend to model fields
     if (req.body.testerId1 !== undefined) {
       req.body.assignedTester1 = req.body.testerId1
-      // If we are updating testerId1 and it's in early stages, update currentAssignee
-      if (
-        (gem.status === GEM_STATUSES.DRAFT_INTAKE || gem.status === GEM_STATUSES.READY_FOR_T1) &&
-        !req.body.currentAssignee
-      ) {
+      if (gem.status === GEM_STATUSES.DRAFT_INTAKE || gem.status === GEM_STATUSES.READY_FOR_T1)
         req.body.currentAssignee = req.body.testerId1
-      }
     }
     if (req.body.testerId2 !== undefined) {
       req.body.assignedTester2 = req.body.testerId2
+      if (gem.status === GEM_STATUSES.READY_FOR_T2) req.body.currentAssignee = req.body.testerId2
     }
 
     // Directly apply all incoming fields to the gem object
     Object.keys(req.body).forEach((field) => {
-      if (["emeraldWeight", "diamondWeight", "totalArticleWeight"].includes(field)) {
+      if (field === "weight") {
         gem[field] =
           req.body[field] === "" || req.body[field] === null ? null : Number(req.body[field])
       } else {
@@ -195,87 +164,162 @@ export const updateGem = async (req, res) => {
   }
 }
 
-// @desc    Update gem with test results (Tester)
-// @route   PUT /api/gems/:id/test
-// @access  Private/Tester
-export const submitTest = async (req, res) => {
+// @desc    Update or Add Test 1 results
+// @route   PUT /api/gems/:id/test1
+// @access  Private/Tester/Admin
+export const updateTest1 = async (req, res) => {
   try {
-    const { ri, sg, hardness, observations, notes, selectedVariety } = req.body
-
-    // Validation
-    const validationErrors = validateTestInput({ ri, sg, hardness, selectedVariety })
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: validationErrors,
-      })
-    }
+    const { ri, sg, hardness, observations, status } = req.body
 
     const gem = await Gem.findById(req.params.id)
-
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Authorization check
-    if (gem.currentAssignee?.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        message: "You are not the current assignee for this gem",
-      })
+    // Build update object
+    const test1Data = { ...gem.test1.toObject() }
+    if (ri !== undefined) test1Data.ri = Number(ri)
+    if (sg !== undefined) test1Data.sg = Number(sg)
+    if (hardness !== undefined) test1Data.hardness = Number(hardness)
+    if (observations !== undefined) {
+      test1Data.observations = { ...(test1Data.observations || {}), ...observations }
     }
 
-    const testData = {
-      ri: Number(ri),
-      sg: Number(sg),
-      hardness: Number(hardness),
-      observations,
-      notes,
-      selectedVariety,
-      testerId: req.user._id,
-      timestamp: new Date(),
-      correctionRequested: false,
-    }
+    test1Data.testerId = req.user._id
+    test1Data.timestamp = new Date()
+    test1Data.correctionRequested = false
 
-    if (gem.status === GEM_STATUSES.READY_FOR_T1) {
-      // Save history if resubmission
-      const historyItem = saveTestHistory(gem.test1)
-      if (historyItem) {
-        gem.test1.history = gem.test1.history || []
-        gem.test1.history.push(historyItem)
-      }
+    gem.test1 = test1Data
 
-      gem.test1 = { ...gem.test1, ...testData }
+    // Status transition if submitted
+    if (status === GEM_STATUSES.READY_FOR_T2) {
       gem.status = GEM_STATUSES.READY_FOR_T2
       gem.currentAssignee = gem.assignedTester2
-    } else if (gem.status === GEM_STATUSES.READY_FOR_T2) {
-      // Save history if resubmission
-      const historyItem = saveTestHistory(gem.test2)
-      if (historyItem) {
-        gem.test2.history = gem.test2.history || []
-        gem.test2.history.push(historyItem)
-      }
-
-      gem.test2 = { ...gem.test2, ...testData }
-      gem.status = GEM_STATUSES.READY_FOR_APPROVAL
-      gem.currentAssignee = null
-    } else {
-      return res.status(400).json({
-        message: `Invalid status for testing. Current status: ${gem.status}`,
-      })
+    } else if (status) {
+      gem.status = status
     }
 
     const updatedGem = await gem.save()
-
-    // Populate before returning
     await updatedGem.populate("currentAssignee", "name role")
     await updatedGem.populate("test1.testerId", "name role")
+
+    res.json(updatedGem)
+  } catch (error) {
+    console.error("Error updating test 1:", error)
+    res.status(500).json({ message: "Error updating test 1", error: error.message })
+  }
+}
+
+// @desc    Update or Add Test 2 results
+// @route   PUT /api/gems/:id/test2
+// @access  Private/Tester/Admin
+export const updateTest2 = async (req, res) => {
+  try {
+    const { ri, sg, hardness, observations, status } = req.body
+
+    const gem = await Gem.findById(req.params.id)
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
+
+    // Build update object
+    const test2Data = { ...gem.test2.toObject() }
+    if (ri !== undefined) test2Data.ri = Number(ri)
+    if (sg !== undefined) test2Data.sg = Number(sg)
+    if (hardness !== undefined) test2Data.hardness = Number(hardness)
+    if (observations !== undefined) {
+      test2Data.observations = { ...(test2Data.observations || {}), ...observations }
+    }
+
+    test2Data.testerId = req.user._id
+    test2Data.timestamp = new Date()
+    test2Data.correctionRequested = false
+
+    gem.test2 = test2Data
+
+    // Status transition if submitted
+    if (status === GEM_STATUSES.READY_FOR_APPROVAL) {
+      gem.status = GEM_STATUSES.READY_FOR_APPROVAL
+      gem.currentAssignee = null // unassigned, ready for admin to pick up
+    } else if (status) {
+      gem.status = status
+    }
+
+    const updatedGem = await gem.save()
+    await updatedGem.populate("currentAssignee", "name role")
     await updatedGem.populate("test2.testerId", "name role")
 
     res.json(updatedGem)
   } catch (error) {
-    console.error("Error submitting test:", error)
-    res.status(500).json({ message: "Error submitting test", error: error.message })
+    console.error("Error updating test 2:", error)
+    res.status(500).json({ message: "Error updating test 2", error: error.message })
   }
 }
 
+// @desc    Update or Add Final Approval
+// @route   PUT /api/gems/:id/final-approval
+// @access  Private/Admin
+export const updateFinalApproval = async (req, res) => {
+  try {
+    const { ri, sg, hardness, finalObservations, status } = req.body
+
+    const gem = await Gem.findById(req.params.id)
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
+
+    // Build update object
+    const finalData = { ...gem.finalApproval.toObject() }
+    if (ri !== undefined) finalData.ri = Number(ri)
+    if (sg !== undefined) finalData.sg = Number(sg)
+    if (hardness !== undefined) finalData.hardness = Number(hardness)
+    if (finalObservations !== undefined) {
+      finalData.finalObservations = {
+        ...(finalData.finalObservations || {}),
+        ...finalObservations,
+      }
+    }
+
+    finalData.approverId = req.user._id
+    finalData.timestamp = new Date()
+
+    gem.finalApproval = finalData
+
+    // Status transition
+    if (status) gem.status = status
+    else gem.status = GEM_STATUSES.DRAFT_APPROVAL
+
+    const updatedGem = await gem.save()
+    await updatedGem.populate("finalApproval.approverId", "name role")
+
+    res.json(updatedGem)
+  } catch (error) {
+    console.error("Error updating final approval:", error)
+    res.status(500).json({ message: "Error updating final approval", error: error.message })
+  }
+}
+
+// @desc    Delete a gem
+// @route   DELETE /api/gems/:id
+// @access  Private/Admin
+export const deleteGem = async (req, res) => {
+  try {
+    const gem = await Gem.findById(req.params.id)
+
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
+
+    // Delete image from Google Drive if exists
+    if (gem.googleDriveFileId) {
+      try {
+        await deleteFromDrive(gem.googleDriveFileId)
+      } catch (error) {
+        console.error("Failed to delete image from Drive:", error)
+      }
+    }
+
+    await gem.deleteOne()
+    res.json({ message: "Gem deleted successfully" })
+  } catch (error) {
+    console.error("Error deleting gem:", error)
+    res.status(500).json({ message: "Error deleting gem", error: error.message })
+  }
+}
+
+//TODO
 // @desc    Request correction from a tester (Admin)
 // @route   PUT /api/gems/:id/request-correction
 // @access  Private/Admin
@@ -327,90 +371,5 @@ export const requestCorrection = async (req, res) => {
   } catch (error) {
     console.error("Error requesting correction:", error)
     res.status(500).json({ message: "Error requesting correction", error: error.message })
-  }
-}
-
-// @desc    Final approval (Approver)
-// @route   PUT /api/gems/:id/approve
-// @access  Private/Admin
-export const approveGem = async (req, res) => {
-  try {
-    const { ri, sg, hardness, finalObservations, finalVariety, itemDescription } = req.body
-
-    // Validation
-    if (!ri || !sg || !hardness || !finalVariety) {
-      return res.status(400).json({
-        message: "Missing required fields: ri, sg, hardness, finalVariety",
-      })
-    }
-
-    const gem = await Gem.findById(req.params.id)
-
-    if (!gem) {
-      return res.status(404).json({ message: "Gem not found" })
-    }
-
-    // Authorization check
-    if (req.user.role !== ROLES.ADMIN) {
-      return res.status(403).json({
-        message: "Only administrators can approve gems",
-      })
-    }
-
-    // Business logic check
-    if (gem.status !== GEM_STATUSES.READY_FOR_APPROVAL) {
-      return res.status(400).json({
-        message: `Gem is not ready for approval. Current status: ${gem.status}`,
-      })
-    }
-
-    gem.finalApproval = {
-      ri: Number(ri),
-      sg: Number(sg),
-      hardness: Number(hardness),
-      finalObservations,
-      finalVariety,
-      itemDescription,
-      approverId: req.user._id,
-      timestamp: new Date(),
-    }
-    gem.status = GEM_STATUSES.COMPLETED
-    gem.currentAssignee = null
-
-    const updatedGem = await gem.save()
-
-    // Populate before returning
-    await updatedGem.populate("finalApproval.approverId", "name role")
-
-    res.json(updatedGem)
-  } catch (error) {
-    console.error("Error approving gem:", error)
-    res.status(500).json({ message: "Error approving gem", error: error.message })
-  }
-}
-
-// @desc    Delete a gem
-// @route   DELETE /api/gems/:id
-// @access  Private/Admin
-export const deleteGem = async (req, res) => {
-  try {
-    const gem = await Gem.findById(req.params.id)
-
-    if (!gem) return res.status(404).json({ message: "Gem not found" })
-
-    // Delete image from Google Drive if exists
-    if (gem.googleDriveFileId) {
-      try {
-        await deleteFromDrive(gem.googleDriveFileId)
-      } catch (error) {
-        console.error("Failed to delete image from Drive:", error)
-      }
-    }
-
-    await gem.deleteOne()
-    res.json({ message: "Gem deleted successfully" })
-  } catch (error) {
-    console.error("Error deleting gem:", error)
-    res.status(500).json({ message: "Error deleting gem", error: error.message })
   }
 }

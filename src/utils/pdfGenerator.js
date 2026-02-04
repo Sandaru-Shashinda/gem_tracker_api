@@ -5,7 +5,7 @@ import { fileURLToPath } from "url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export const createPDFReport = async (gem) => {
+export const createPDFReport = async (gem, qrCode) => {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 50 })
@@ -55,9 +55,7 @@ export const createPDFReport = async (gem) => {
       let currentY = 160
       drawRow("Color:", gem.color, currentY)
       currentY += 20
-      drawRow("Emerald Weight:", `${gem.emeraldWeight} ct`, currentY)
-      currentY += 20
-      drawRow("Diamond Weight:", `${gem.diamondWeight} ct`, currentY)
+      drawRow("Weight:", `${gem.weight} ct`, currentY)
       currentY += 20
       drawRow("Shape:", gem.finalApproval.finalObservations.shape, currentY)
       currentY += 20
@@ -124,7 +122,7 @@ export const createPDFReport = async (gem) => {
         .fillColor("#0f172a")
         .fontSize(11)
         .font("Helvetica-Bold")
-        .text(`Total article weight: ${gem.totalArticleWeight} g.`, 50, currentY)
+        .text(`Weight: ${gem.weight} ct.`, 50, currentY)
 
       // Footer
       const footerY = doc.page.height - 140
@@ -168,8 +166,8 @@ export const createPDFReport = async (gem) => {
       const generate = async () => {
         await addImage()
 
-        if (gem.qrCode) {
-          doc.image(gem.qrCode, doc.page.width / 2 - 50, footerY, { width: 100 })
+        if (qrCode) {
+          doc.image(qrCode, doc.page.width / 2 - 50, footerY, { width: 100 })
         }
 
         doc

@@ -23,3 +23,9 @@ export const ROLES = {
   TESTER: "TESTER",
   HELPER: "HELPER",
 }
+
+export const REPORT_TYPES = {
+  SMALL: "small",
+  MEDIUM: "medium",
+  LARGE: "large",
+}

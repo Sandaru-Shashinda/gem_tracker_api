@@ -4,9 +4,10 @@ import {
   getGemById,
   intakeGem,
   updateGem,
-  submitTest,
   requestCorrection,
-  approveGem,
+  updateTest1,
+  updateTest2,
+  updateFinalApproval,
 } from "../controllers/gemController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 import upload from "../middleware/uploadMiddleware.js"
@@ -20,10 +21,11 @@ gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), upload.single("
 gemRoutes
   .route("/:id")
   .get(protect, getGemById)
-  .put(protect, authorize("ADMIN", "HELPER"), upload.single("image"), updateGem)
+  .put(protect, authorize("ADMIN", "HELPER", "TESTER"), upload.single("image"), updateGem)
 
-gemRoutes.put("/:id/test", protect, authorize("TESTER", "ADMIN"), submitTest)
+gemRoutes.put("/:id/test1", protect, authorize("TESTER", "ADMIN"), updateTest1)
+gemRoutes.put("/:id/test2", protect, authorize("TESTER", "ADMIN"), updateTest2)
+gemRoutes.put("/:id/final-approval", protect, authorize("ADMIN"), updateFinalApproval)
 gemRoutes.put("/:id/request-correction", protect, authorize("ADMIN"), requestCorrection)
-gemRoutes.put("/:id/approve", protect, authorize("ADMIN"), approveGem)
 
 export default gemRoutes
