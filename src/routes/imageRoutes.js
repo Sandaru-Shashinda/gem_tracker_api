@@ -17,6 +17,6 @@ imageRoutes
   .route("/:id")
   .get(protect, getImageById)
   .put(protect, updateImage)
-  .delete(protect, authorize("ADMIN"), deleteImage)
+  .delete(protect, deleteImage)
 
 export default imageRoutes
