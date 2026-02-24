@@ -1,6 +1,6 @@
 import Gem from "../models/Gem.js"
-import { deleteFromDrive } from "../utils/googleDriveService.js"
-import { generateGemId, handleImageUpload, buildGemQuery } from "../services/gem.service.js"
+import Image from "../models/Image.js"
+import { generateGemId, buildGemQuery } from "../services/gem.service.js"
 import { GEM_STATUSES, ROLES, REPORT_TYPES } from "../const/const.js"
 import Report from "../models/Report.js"
 import { generateReportId } from "../services/report.service.js"
@@ -102,7 +102,8 @@ export const getGemById = async (req, res) => {
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
   try {
-    const { color, weight, itemDescription, testerId1, testerId2, customerId, status } = req.body
+    const { color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds } =
+      req.body
 
     // Validation
     if (status !== GEM_STATUSES.DRAFT_INTAKE && (!color || !weight || !testerId1 || !testerId2)) {
@@ -112,7 +113,6 @@ export const intakeGem = async (req, res) => {
     }
 
     const gemId = await generateGemId()
-    const imageData = await handleImageUpload(req.file)
 
     const gem = new Gem({
       gemId,
@@ -120,8 +120,7 @@ export const intakeGem = async (req, res) => {
       color,
       weight: weight ? Number(weight) : null,
       itemDescription,
-      imageUrl: imageData.imageUrl,
-      googleDriveFileId: imageData.googleDriveFileId,
+      images: imageIds || [],
       assignedTester1: testerId1 || null,
       assignedTester2: testerId2 || null,
       currentAssignee: testerId1 || null,
@@ -154,13 +153,23 @@ export const updateGem = async (req, res) => {
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    console.log(req.body)
+    // Handle image update (replacing with new list of image IDs)
+    if (req.body.imageIds && Array.isArray(req.body.imageIds)) {
+      gem.images = req.body.imageIds
+    }
 
-    // Handle image update
-    if (req.file) {
-      const imageData = await handleImageUpload(req.file, gem.googleDriveFileId)
-      gem.imageUrl = imageData.imageUrl
-      gem.googleDriveFileId = imageData.googleDriveFileId
+    // Allow deleting specific images if imageIdsToDelete is provided in body
+    if (req.body.imageIdsToDelete) {
+      const toDelete = Array.isArray(req.body.imageIdsToDelete)
+        ? req.body.imageIdsToDelete
+        : req.body.imageIdsToDelete.split(",")
+
+      for (const id of toDelete) {
+        // Just remove from gem. Note: Image deletion is handled by deleteImage endpoint now if needed,
+        // but for backward compatibility we keep it here if they insist,
+        // although "separate edits" suggest managing images independently.
+        gem.images = gem.images.filter((imgId) => imgId.toString() !== id.toString())
+      }
     }
 
     // Mapping tester IDs from frontend to model fields
@@ -358,12 +367,10 @@ export const deleteGem = async (req, res) => {
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Delete image from Google Drive if exists
-    if (gem.googleDriveFileId) {
-      try {
-        await deleteFromDrive(gem.googleDriveFileId)
-      } catch (error) {
-        console.error("Failed to delete image from Drive:", error)
+    // Delete all images associated with the gem
+    if (gem.images && gem.images.length > 0) {
+      for (const imageId of gem.images) {
+        await Image.findByIdAndDelete(imageId)
       }
     }
 
@@ -427,5 +434,34 @@ export const requestCorrection = async (req, res) => {
   } catch (error) {
     console.error("Error requesting correction:", error)
     res.status(500).json({ message: "Error requesting correction", error: error.message })
+  }
+}
+
+// @desc    Add images to an existing gem
+// @route   POST /api/gems/:id/images
+// @access  Private
+export const addGemImages = async (req, res) => {
+  try {
+    const gem = await Gem.findById(req.params.id)
+
+    if (!gem) {
+      return res.status(404).json({ message: "Gem not found" })
+    }
+
+    const { imageIds } = req.body
+
+    if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({ message: "No imageIds provided" })
+    }
+
+    gem.images = [...(gem.images || []), ...imageIds]
+
+    const updatedGem = await gem.save()
+    await updatedGem.populate("currentAssignee", "name role")
+
+    res.json(updatedGem)
+  } catch (error) {
+    console.error("Error adding images to gem:", error)
+    res.status(500).json({ message: "Error adding images", error: error.message })
   }
 }

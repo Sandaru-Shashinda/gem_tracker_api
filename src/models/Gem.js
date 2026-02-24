@@ -16,8 +16,7 @@ const GemSchema = new mongoose.Schema(
     weight: Number, // Weight (ct)
 
     itemDescription: String, // Full textual description
-    imageUrl: String,
-    googleDriveFileId: String,
+    images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
 
     // assignees (from Intake)
     assignedTester1: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

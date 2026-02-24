@@ -1,31 +1,10 @@
 import Gem from "../models/Gem.js"
 import { GEM_STATUSES, ROLES } from "../const/const.js"
-import { uploadToDrive, deleteFromDrive } from "../utils/googleDriveService.js"
 
 // Helper Functions
 export const generateGemId = async () => {
   const gemCount = await Gem.countDocuments()
   return `GEM-${new Date().getFullYear()}-${(gemCount + 1).toString().padStart(3, "0")}`
-}
-
-export const handleImageUpload = async (file, existingFileId = null) => {
-  if (!file) return { imageUrl: "", googleDriveFileId: "" }
-
-  try {
-    // Delete old image if exists
-    if (existingFileId) {
-      await deleteFromDrive(existingFileId)
-    }
-
-    const uploadResult = await uploadToDrive(file)
-    return {
-      imageUrl: uploadResult.link,
-      googleDriveFileId: uploadResult.id,
-    }
-  } catch (error) {
-    console.error("Failed to upload to Google Drive:", error)
-    throw new Error("Image upload failed")
-  }
 }
 
 export const buildGemQuery = (queryParams, user) => {

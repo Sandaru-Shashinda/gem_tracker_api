@@ -10,6 +10,7 @@ import gemRoutes from "./routes/gemRoutes.js"
 import referenceRoutes from "./routes/referenceRoutes.js"
 import reportRoutes from "./routes/reportRoutes.js"
 import customerRoutes from "./routes/customerRoutes.js"
+import imageRoutes from "./routes/imageRoutes.js"
 
 dotenv.config()
 connectDB()
@@ -44,6 +45,7 @@ app.use("/api/gems", gemRoutes)
 app.use("/api/customers", customerRoutes)
 app.use("/api/references", referenceRoutes)
 app.use("/api/reports", reportRoutes)
+app.use("/api/images", imageRoutes)
 
 // Error handling middleware (add at the end)
 app.use((err, req, res, next) => {
