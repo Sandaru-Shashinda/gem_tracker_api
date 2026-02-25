@@ -1,4 +1,6 @@
 import Image from "../models/Image.js"
+import Customer from "../models/Customer.js"
+import Gem from "../models/Gem.js"
 import { handleImageUpload } from "../services/image.service.js"
 
 // @desc    Upload image
@@ -107,6 +109,14 @@ export const deleteImage = async (req, res) => {
     if (!image) {
       return res.status(404).json({ message: "Image not found" })
     }
+
+    const imageId = image._id
+
+    // Remove references from Customers
+    await Customer.updateMany({ logo: imageId.toString() }, { $set: { logo: "" } })
+
+    // Remove references from Gems
+    await Gem.updateMany({ images: imageId }, { $pull: { images: imageId } })
 
     await image.deleteOne()
     res.json({ message: "Image deleted successfully" })

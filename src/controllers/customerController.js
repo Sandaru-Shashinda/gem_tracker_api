@@ -1,4 +1,5 @@
 import Customer from "../models/Customer.js"
+import { handleImageUpload } from "../services/image.service.js"
 
 // @desc    Get all customers with pagination and filtering
 // @route   GET /api/customers
@@ -65,13 +66,22 @@ export const createCustomer = async (req, res) => {
       return res.status(400).json({ message: "Customer with this email already exists" })
     }
 
+    let logoId = ""
+    if (req.file) {
+      const savedImage = await handleImageUpload(req.file, req.user, {
+        category: "customer_logo",
+        name: `${customerName} Logo`,
+      })
+      logoId = savedImage._id.toString()
+    }
+
     const customer = new Customer({
       customerName,
       companyName,
       address,
       phoneNumber,
       email,
-      logo: req.file ? `/uploads/${req.file.filename}` : "",
+      logo: logoId,
     })
 
     const createdCustomer = await customer.save()
@@ -96,7 +106,11 @@ export const updateCustomer = async (req, res) => {
       customer.email = req.body.email || customer.email
 
       if (req.file) {
-        customer.logo = `/uploads/${req.file.filename}`
+        const savedImage = await handleImageUpload(req.file, req.user, {
+          category: "customer_logo",
+          name: `${customer.customerName} Logo`,
+        })
+        customer.logo = savedImage._id.toString()
       }
 
       const updatedCustomer = await customer.save()
