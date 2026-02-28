@@ -3,8 +3,18 @@ import { GEM_STATUSES, ROLES } from "../const/const.js"
 
 // Helper Functions
 export const generateGemId = async () => {
-  const gemCount = await Gem.countDocuments()
-  return `GEM-${new Date().getFullYear()}-${(gemCount + 1).toString().padStart(3, "0")}`
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = (now.getMonth() + 1).toString().padStart(2, "0")
+
+  // Reset counter every month
+  const startOfMonth = new Date(year, now.getMonth(), 1)
+  const gemCount = await Gem.countDocuments({
+    createdAt: { $gte: startOfMonth },
+  })
+
+  const sequence = (gemCount + 1).toString().padStart(5, "0")
+  return `GEM-${year}-${month}-${sequence}`
 }
 
 export const buildGemQuery = (queryParams, user) => {
