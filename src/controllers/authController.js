@@ -25,7 +25,7 @@ export const loginUser = async (req, res) => {
 // @route   POST /api/auth/register
 // @access  Private/Admin
 export const registerUser = async (req, res) => {
-  const { password, role, name, age, dob, idNumber, address, email } = req.body
+  const { password, role, name, age, dob, idNumber, address, email, phoneNumber } = req.body
 
   const userExists = await User.findOne({ email })
 
@@ -82,6 +82,7 @@ export const getUserProfile = async (req, res) => {
       dob: user.dob,
       idNumber: user.idNumber,
       address: user.address,
+      phoneNumber: user.phoneNumber,
       email: user.email,
     })
   } else {
@@ -137,6 +138,7 @@ export const updateUser = async (req, res) => {
       dob: updatedUser.dob,
       idNumber: updatedUser.idNumber,
       address: updatedUser.address,
+      phoneNumber: updatedUser.phoneNumber,
       email: updatedUser.email,
     })
   } else {
