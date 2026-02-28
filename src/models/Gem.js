@@ -60,9 +60,11 @@ const GemSchema = new mongoose.Schema(
       },
       testerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       timestamp: Date,
+      selectedVariety: String,
       correctionRequested: { type: Boolean, default: false },
       correctionNote: String,
     },
+
     test2: {
       ri: Number,
       sg: Number,
@@ -95,9 +97,11 @@ const GemSchema = new mongoose.Schema(
       },
       testerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       timestamp: Date,
+      selectedVariety: String,
       correctionRequested: { type: Boolean, default: false },
       correctionNote: String,
     },
+
     finalApproval: {
       ri: Number,
       sg: Number,
@@ -130,6 +134,7 @@ const GemSchema = new mongoose.Schema(
       },
       approverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       timestamp: Date,
+      finalVariety: String,
     },
 
     reportId: { type: mongoose.Schema.Types.ObjectId, ref: "Report" },

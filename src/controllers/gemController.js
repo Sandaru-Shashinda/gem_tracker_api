@@ -183,13 +183,42 @@ export const updateGem = async (req, res) => {
       if (gem.status === GEM_STATUSES.READY_FOR_T2) req.body.currentAssignee = req.body.testerId2
     }
 
-    // Directly apply all incoming fields to the gem object
-    Object.keys(req.body).forEach((field) => {
-      if (field === "weight") {
-        gem[field] =
-          req.body[field] === "" || req.body[field] === null ? null : Number(req.body[field])
+    // Senior Way: Deep merge for stages to avoid wiping data (e.g. testerId, timestamp)
+    Object.keys(req.body).forEach((key) => {
+      const val = req.body[key]
+      if (val === undefined) return
+
+      // Handle nested stages (test1, test2, finalApproval)
+      if (
+        ["test1", "test2", "finalApproval"].includes(key) &&
+        typeof val === "object" &&
+        val !== null
+      ) {
+        // Core metrics conversion
+        if (val.ri !== undefined)
+          gem[key].ri = val.ri === "" || val.ri === null ? null : Number(val.ri)
+        if (val.sg !== undefined)
+          gem[key].sg = val.sg === "" || val.sg === null ? null : Number(val.sg)
+        if (val.hardness !== undefined)
+          gem[key].hardness =
+            val.hardness === "" || val.hardness === null ? null : Number(val.hardness)
+        if (val.selectedVariety !== undefined) gem[key].selectedVariety = val.selectedVariety
+        if (val.finalVariety !== undefined) gem[key].finalVariety = val.finalVariety
+
+        // Observations merge
+        const obsKey = key === "finalApproval" ? "finalObservations" : "observations"
+        if (val[obsKey] && typeof val[obsKey] === "object") {
+          // ensure sub-object exists
+          if (!gem[key][obsKey]) gem[key][obsKey] = {}
+          Object.keys(val[obsKey]).forEach((subKey) => {
+            gem[key][obsKey][subKey] = val[obsKey][subKey]
+          })
+        }
+      } else if (key === "weight") {
+        gem[key] = val === "" || val === null ? null : Number(val)
       } else {
-        gem[field] = req.body[field]
+        // Generic top-level fields
+        gem[key] = val
       }
     })
 
@@ -211,7 +240,7 @@ export const updateGem = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest1 = async (req, res) => {
   try {
-    const { ri, sg, hardness, observations, status } = req.body
+    const { ri, sg, hardness, observations, selectedVariety, status } = req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
@@ -221,6 +250,7 @@ export const updateTest1 = async (req, res) => {
     if (ri !== undefined) test1Data.ri = Number(ri)
     if (sg !== undefined) test1Data.sg = Number(sg)
     if (hardness !== undefined) test1Data.hardness = Number(hardness)
+    if (selectedVariety !== undefined) test1Data.selectedVariety = selectedVariety
     if (observations !== undefined) {
       test1Data.observations = { ...(test1Data.observations || {}), ...observations }
     }
@@ -255,7 +285,7 @@ export const updateTest1 = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest2 = async (req, res) => {
   try {
-    const { ri, sg, hardness, observations, status } = req.body
+    const { ri, sg, hardness, observations, selectedVariety, status } = req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
@@ -265,6 +295,7 @@ export const updateTest2 = async (req, res) => {
     if (ri !== undefined) test2Data.ri = Number(ri)
     if (sg !== undefined) test2Data.sg = Number(sg)
     if (hardness !== undefined) test2Data.hardness = Number(hardness)
+    if (selectedVariety !== undefined) test2Data.selectedVariety = selectedVariety
     if (observations !== undefined) {
       test2Data.observations = { ...(test2Data.observations || {}), ...observations }
     }
@@ -299,7 +330,7 @@ export const updateTest2 = async (req, res) => {
 // @access  Private/Admin
 export const updateFinalApproval = async (req, res) => {
   try {
-    const { ri, sg, hardness, finalObservations, status } = req.body
+    const { ri, sg, hardness, finalObservations, finalVariety, itemDescription, status } = req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
@@ -309,6 +340,7 @@ export const updateFinalApproval = async (req, res) => {
     if (ri !== undefined) finalData.ri = Number(ri)
     if (sg !== undefined) finalData.sg = Number(sg)
     if (hardness !== undefined) finalData.hardness = Number(hardness)
+    if (finalVariety !== undefined) finalData.finalVariety = finalVariety
     if (finalObservations !== undefined) {
       finalData.finalObservations = {
         ...(finalData.finalObservations || {}),
@@ -320,6 +352,9 @@ export const updateFinalApproval = async (req, res) => {
     finalData.timestamp = new Date()
 
     gem.finalApproval = finalData
+
+    // Also update top-level itemDescription if provided
+    if (itemDescription !== undefined) gem.itemDescription = itemDescription
 
     // Status transition
     if (status) {
