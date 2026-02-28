@@ -12,17 +12,16 @@ export const searchReferences = async (req, res) => {
 
   if (ri) {
     const riVal = parseFloat(ri)
-    // Tolerance of 0.01 for Refractive Index matches
-    // Finds gems where the range overlaps with the input value
-    query.refractiveIndexMin = { $lte: riVal + 0.01 }
-    query.refractiveIndexMax = { $gte: riVal - 0.01 }
+    // Tolerance of 0.1 for Refractive Index matches (based on user request)
+    query.refractiveIndexMin = { $lte: riVal + 0.1 }
+    query.refractiveIndexMax = { $gte: riVal - 0.1 }
   }
 
   if (sg) {
     const sgVal = parseFloat(sg)
-    // Tolerance of 0.05 for Specific Gravity
-    query.specificGravityMin = { $lte: sgVal + 0.05 }
-    query.specificGravityMax = { $gte: sgVal - 0.05 }
+    // Tolerance of 0.5 for Specific Gravity (based on user request e.g. 2.68 -> 2-3)
+    query.specificGravityMin = { $lte: sgVal + 0.5 }
+    query.specificGravityMax = { $gte: sgVal - 0.5 }
   }
 
   if (hardness) {
