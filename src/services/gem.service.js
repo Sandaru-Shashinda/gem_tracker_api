@@ -73,8 +73,8 @@ export const validateTestInput = (data) => {
   if (!data.sg || typeof data.sg !== "number") {
     errors.push("Valid SG (specific gravity) is required")
   }
-  if (!data.hardness || typeof data.hardness !== "number") {
-    errors.push("Valid hardness is required")
+  if (!data.hardnessMin || typeof data.hardnessMin !== "number") {
+    errors.push("Valid minimum hardness is required")
   }
   if (!data.observations?.variety) {
     errors.push("Variety is required")

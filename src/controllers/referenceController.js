@@ -4,17 +4,32 @@ import GemReference from "../models/GemReference.js"
 // @route   GET /api/references/search
 // @access  Private
 export const searchReferences = async (req, res) => {
-  const { ri, sg, hardness } = req.query
+  const { riMin, riMax, sg, hardnessMin, hardnessMax } = req.query
 
   const query = {}
 
   // Search Logic: Find gems where the input value falls within the gem's range (with tolerance)
 
-  if (ri) {
-    const riVal = parseFloat(ri)
-    // Tolerance of 0.1 for Refractive Index matches (based on user request)
-    query.refractiveIndexMin = { $lte: riVal + 0.1 }
-    query.refractiveIndexMax = { $gte: riVal - 0.1 }
+  if (riMin || riMax) {
+    const riMinVal = riMin ? parseFloat(riMin) : null
+    const riMaxVal = riMax ? parseFloat(riMax) : null
+
+    // Containment logic: the reference's known RI range must contain the tester's measured range.
+    // i.e. ref.min <= tester.riMin  AND  ref.max >= tester.riMax
+    // Example: tester measures 1.4 - 1.5  →  ref range 1.3 - 1.5 matches (1.3 ≤ 1.4 and 1.5 ≥ 1.5)
+    if (riMinVal !== null && riMaxVal !== null) {
+      // Both provided: reference must contain the full tester range
+      query.refractiveIndexMin = { $lte: riMinVal }
+      query.refractiveIndexMax = { $gte: riMaxVal }
+    } else if (riMinVal !== null) {
+      // Only min provided: reference range must contain that single value
+      query.refractiveIndexMin = { $lte: riMinVal }
+      query.refractiveIndexMax = { $gte: riMinVal }
+    } else if (riMaxVal !== null) {
+      // Only max provided: reference range must contain that single value
+      query.refractiveIndexMin = { $lte: riMaxVal }
+      query.refractiveIndexMax = { $gte: riMaxVal }
+    }
   }
 
   if (sg) {
@@ -24,11 +39,21 @@ export const searchReferences = async (req, res) => {
     query.specificGravityMax = { $gte: sgVal - 0.5 }
   }
 
-  if (hardness) {
-    const hVal = parseFloat(hardness)
-    // Exact range check for hardness
-    query.hardnessMin = { $lte: hVal }
-    query.hardnessMax = { $gte: hVal }
+  if (hardnessMin || hardnessMax) {
+    const hMinVal = hardnessMin ? parseFloat(hardnessMin) : null
+    const hMaxVal = hardnessMax ? parseFloat(hardnessMax) : null
+
+    // Containment logic: reference range must contain the tester's measured range
+    if (hMinVal !== null && hMaxVal !== null) {
+      query.hardnessMin = { $lte: hMinVal }
+      query.hardnessMax = { $gte: hMaxVal }
+    } else if (hMinVal !== null) {
+      query.hardnessMin = { $lte: hMinVal }
+      query.hardnessMax = { $gte: hMinVal }
+    } else if (hMaxVal !== null) {
+      query.hardnessMin = { $lte: hMaxVal }
+      query.hardnessMax = { $gte: hMaxVal }
+    }
   }
 
   try {

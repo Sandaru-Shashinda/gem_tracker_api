@@ -29,9 +29,11 @@ const GemSchema = new mongoose.Schema(
     },
 
     test1: {
-      ri: Number,
+      riMin: Number,
+      riMax: Number,
       sg: Number,
-      hardness: Number,
+      hardnessMin: Number,
+      hardnessMax: Number,
       observations: {
         grade: String,
         cuttingShape: String,
@@ -66,9 +68,11 @@ const GemSchema = new mongoose.Schema(
     },
 
     test2: {
-      ri: Number,
+      riMin: Number,
+      riMax: Number,
       sg: Number,
-      hardness: Number,
+      hardnessMin: Number,
+      hardnessMax: Number,
       observations: {
         grade: String,
         cuttingShape: String,
@@ -103,9 +107,11 @@ const GemSchema = new mongoose.Schema(
     },
 
     finalApproval: {
-      ri: Number,
+      riMin: Number,
+      riMax: Number,
       sg: Number,
-      hardness: Number,
+      hardnessMin: Number,
+      hardnessMax: Number,
       finalObservations: {
         grade: String,
         cuttingShape: String,
