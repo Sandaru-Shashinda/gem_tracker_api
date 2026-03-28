@@ -149,6 +149,7 @@ export const intakeGem = async (req, res) => {
 // @access  Private
 export const updateGem = async (req, res) => {
   try {
+    console.log(req.body)
     const gem = await Gem.findById(req.params.id)
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
@@ -194,26 +195,39 @@ export const updateGem = async (req, res) => {
         typeof val === "object" &&
         val !== null
       ) {
-        // Core metrics conversion
-        if (val.ri !== undefined)
-          gem[key].ri = val.ri === "" || val.ri === null ? null : Number(val.ri)
-        if (val.sg !== undefined)
-          gem[key].sg = val.sg === "" || val.sg === null ? null : Number(val.sg)
-        if (val.hardness !== undefined)
-          gem[key].hardness =
-            val.hardness === "" || val.hardness === null ? null : Number(val.hardness)
-        if (val.selectedVariety !== undefined) gem[key].selectedVariety = val.selectedVariety
-        if (val.finalVariety !== undefined) gem[key].finalVariety = val.finalVariety
-
-        // Observations merge
+        // Build a merged object from existing + incoming data to guarantee Mongoose detects the change
+        const existing = gem[key] ? gem[key].toObject() : {}
         const obsKey = key === "finalApproval" ? "finalObservations" : "observations"
-        if (val[obsKey] && typeof val[obsKey] === "object") {
-          // ensure sub-object exists
-          if (!gem[key][obsKey]) gem[key][obsKey] = {}
-          Object.keys(val[obsKey]).forEach((subKey) => {
-            gem[key][obsKey][subKey] = val[obsKey][subKey]
-          })
+
+        const merged = {
+          ...existing,
+          ...(val.riMin !== undefined && {
+            riMin: val.riMin === "" || val.riMin === null ? null : Number(val.riMin),
+          }),
+          ...(val.riMax !== undefined && {
+            riMax: val.riMax === "" || val.riMax === null ? null : Number(val.riMax),
+          }),
+          ...(val.sg !== undefined && {
+            sg: val.sg === "" || val.sg === null ? null : Number(val.sg),
+          }),
+          ...(val.hardnessMin !== undefined && {
+            hardnessMin:
+              val.hardnessMin === "" || val.hardnessMin === null ? null : Number(val.hardnessMin),
+          }),
+          ...(val.hardnessMax !== undefined && {
+            hardnessMax:
+              val.hardnessMax === "" || val.hardnessMax === null ? null : Number(val.hardnessMax),
+          }),
+          ...(val.selectedVariety !== undefined && { selectedVariety: val.selectedVariety }),
+          ...(val.finalVariety !== undefined && { finalVariety: val.finalVariety }),
+          ...(val[obsKey] &&
+            typeof val[obsKey] === "object" && {
+              [obsKey]: { ...(existing[obsKey] || {}), ...val[obsKey] },
+            }),
         }
+
+        gem[key] = merged
+        gem.markModified(key)
       } else if (key === "weight") {
         gem[key] = val === "" || val === null ? null : Number(val)
       } else {
@@ -240,16 +254,23 @@ export const updateGem = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest1 = async (req, res) => {
   try {
-    const { ri, sg, hardness, observations, selectedVariety, status } = req.body
+    const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety, status } =
+      req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
     // Build update object
     const test1Data = { ...gem.test1.toObject() }
-    if (ri !== undefined) test1Data.ri = Number(ri)
-    if (sg !== undefined) test1Data.sg = Number(sg)
-    if (hardness !== undefined) test1Data.hardness = Number(hardness)
+    if (riMin !== undefined) test1Data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
+    if (riMax !== undefined) test1Data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+    if (sg !== undefined) test1Data.sg = sg === "" || sg === null ? null : Number(sg)
+    if (hardnessMin !== undefined)
+      test1Data.hardnessMin =
+        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
+    if (hardnessMax !== undefined)
+      test1Data.hardnessMax =
+        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
     if (selectedVariety !== undefined) test1Data.selectedVariety = selectedVariety
     if (observations !== undefined) {
       test1Data.observations = { ...(test1Data.observations || {}), ...observations }
@@ -285,16 +306,23 @@ export const updateTest1 = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest2 = async (req, res) => {
   try {
-    const { ri, sg, hardness, observations, selectedVariety, status } = req.body
+    const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety, status } =
+      req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
     // Build update object
     const test2Data = { ...gem.test2.toObject() }
-    if (ri !== undefined) test2Data.ri = Number(ri)
-    if (sg !== undefined) test2Data.sg = Number(sg)
-    if (hardness !== undefined) test2Data.hardness = Number(hardness)
+    if (riMin !== undefined) test2Data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
+    if (riMax !== undefined) test2Data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+    if (sg !== undefined) test2Data.sg = sg === "" || sg === null ? null : Number(sg)
+    if (hardnessMin !== undefined)
+      test2Data.hardnessMin =
+        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
+    if (hardnessMax !== undefined)
+      test2Data.hardnessMax =
+        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
     if (selectedVariety !== undefined) test2Data.selectedVariety = selectedVariety
     if (observations !== undefined) {
       test2Data.observations = { ...(test2Data.observations || {}), ...observations }
@@ -330,16 +358,32 @@ export const updateTest2 = async (req, res) => {
 // @access  Private/Admin
 export const updateFinalApproval = async (req, res) => {
   try {
-    const { ri, sg, hardness, finalObservations, finalVariety, itemDescription, status } = req.body
+    const {
+      riMin,
+      riMax,
+      sg,
+      hardnessMin,
+      hardnessMax,
+      finalObservations,
+      finalVariety,
+      itemDescription,
+      status,
+    } = req.body
 
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
     // Build update object
     const finalData = { ...gem.finalApproval.toObject() }
-    if (ri !== undefined) finalData.ri = Number(ri)
-    if (sg !== undefined) finalData.sg = Number(sg)
-    if (hardness !== undefined) finalData.hardness = Number(hardness)
+    if (riMin !== undefined) finalData.riMin = riMin === "" || riMin === null ? null : Number(riMin)
+    if (riMax !== undefined) finalData.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+    if (sg !== undefined) finalData.sg = sg === "" || sg === null ? null : Number(sg)
+    if (hardnessMin !== undefined)
+      finalData.hardnessMin =
+        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
+    if (hardnessMax !== undefined)
+      finalData.hardnessMax =
+        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
     if (finalVariety !== undefined) finalData.finalVariety = finalVariety
     if (finalObservations !== undefined) {
       finalData.finalObservations = {
