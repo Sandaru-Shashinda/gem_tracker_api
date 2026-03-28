@@ -102,7 +102,7 @@ export const getGemById = async (req, res) => {
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
   try {
-    const { color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds } =
+    const { color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds, reportTypes } =
       req.body
 
     // Validation
@@ -125,6 +125,7 @@ export const intakeGem = async (req, res) => {
       assignedTester2: testerId2 || null,
       currentAssignee: testerId1 || null,
       customerId: customerId || null,
+      reportTypes: reportTypes || [],
       intake: {
         helperId: req.user._id,
         timestamp: new Date(),
