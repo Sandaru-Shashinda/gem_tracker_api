@@ -82,14 +82,6 @@ export const getGemById = async (req, res) => {
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Authorization check - testers can only view their assigned gems
-    if (
-      req.user.role === ROLES.TESTER &&
-      gem.currentAssignee?.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
     res.json(gem)
   } catch (error) {
     console.error("Error fetching gem:", error)
@@ -514,6 +506,60 @@ export const requestCorrection = async (req, res) => {
   } catch (error) {
     console.error("Error requesting correction:", error)
     res.status(500).json({ message: "Error requesting correction", error: error.message })
+  }
+}
+
+// @desc    Flag a correction note on the final approval stage (no workflow re-route)
+// @route   PUT /api/gems/:id/request-approver-correction
+// @access  Private/Admin
+export const requestApproverCorrection = async (req, res) => {
+  try {
+    const { note } = req.body
+
+    if (!note || !note.trim()) {
+      return res.status(400).json({ message: "A correction note is required" })
+    }
+
+    const gem = await Gem.findById(req.params.id)
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
+
+    const finalData = gem.finalApproval ? gem.finalApproval.toObject() : {}
+    finalData.approverCorrectionRequested = true
+    finalData.approverCorrectionNote = note.trim()
+    gem.finalApproval = finalData
+    gem.markModified("finalApproval")
+
+    const updatedGem = await gem.save()
+    await updatedGem.populate("currentAssignee", "name role")
+
+    res.json(updatedGem)
+  } catch (error) {
+    console.error("Error requesting approver correction:", error)
+    res.status(500).json({ message: "Error requesting approver correction", error: error.message })
+  }
+}
+
+// @desc    Dismiss the approver correction flag
+// @route   PUT /api/gems/:id/dismiss-approver-correction
+// @access  Private/Admin
+export const dismissApproverCorrection = async (req, res) => {
+  try {
+    const gem = await Gem.findById(req.params.id)
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
+
+    const finalData = gem.finalApproval ? gem.finalApproval.toObject() : {}
+    finalData.approverCorrectionRequested = false
+    finalData.approverCorrectionNote = ""
+    gem.finalApproval = finalData
+    gem.markModified("finalApproval")
+
+    const updatedGem = await gem.save()
+    await updatedGem.populate("currentAssignee", "name role")
+
+    res.json(updatedGem)
+  } catch (error) {
+    console.error("Error dismissing approver correction:", error)
+    res.status(500).json({ message: "Error dismissing approver correction", error: error.message })
   }
 }
 

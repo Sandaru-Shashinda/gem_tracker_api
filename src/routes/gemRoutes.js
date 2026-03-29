@@ -7,6 +7,8 @@ import {
   updateGem,
   addGemImages,
   requestCorrection,
+  requestApproverCorrection,
+  dismissApproverCorrection,
   updateTest1,
   updateTest2,
   updateFinalApproval,
@@ -30,5 +32,7 @@ gemRoutes.put("/:id/test2", protect, authorize("TESTER", "ADMIN"), updateTest2)
 gemRoutes.put("/:id/final-approval", protect, authorize("ADMIN"), updateFinalApproval)
 gemRoutes.post("/:id/images", protect, addGemImages)
 gemRoutes.put("/:id/request-correction", protect, authorize("ADMIN"), requestCorrection)
+gemRoutes.put("/:id/request-approver-correction", protect, authorize("ADMIN"), requestApproverCorrection)
+gemRoutes.put("/:id/dismiss-approver-correction", protect, authorize("ADMIN"), dismissApproverCorrection)
 
 export default gemRoutes

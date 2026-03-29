@@ -26,19 +26,6 @@ export const buildGemQuery = (queryParams, user) => {
     query.gemId = { $regex: sanitizedGemId, $options: "i" }
   }
 
-  // Enforce assignee filter for TESTER role
-  if (user?.role === ROLES.TESTER) {
-    query.currentAssignee = user._id
-    query.status = {
-      $in: [
-        GEM_STATUSES.READY_FOR_T1,
-        GEM_STATUSES.READY_FOR_T2,
-        GEM_STATUSES.DRAFT_TEST_1,
-        GEM_STATUSES.DRAFT_TEST_2,
-      ],
-    }
-  }
-
   // Filter by Status
   if (queryParams.status && Object.values(GEM_STATUSES).includes(queryParams.status)) {
     query.status = queryParams.status
