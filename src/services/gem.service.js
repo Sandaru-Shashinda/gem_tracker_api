@@ -14,7 +14,7 @@ export const generateGemId = async () => {
   })
 
   const sequence = (gemCount + 1).toString().padStart(5, "0")
-  return `GEM-${year}-${month}-${sequence}`
+  return `GRC-${year}-${month}-${sequence}`
 }
 
 export const buildGemQuery = (queryParams, user) => {
