@@ -1,17 +1,37 @@
 import Gem from "../models/Gem.js"
+import GemTest1 from "../models/GemTest1.js"
+import GemTest2 from "../models/GemTest2.js"
+import GemFinalApproval from "../models/GemFinalApproval.js"
 import Image from "../models/Image.js"
-import { generateGemId, buildGemQuery } from "../services/gem.service.js"
-import { GEM_STATUSES, ROLES, REPORT_TYPES } from "../const/const.js"
-import Report from "../models/Report.js"
-import { generateReportId } from "../services/report.service.js"
+import { generateGemId, buildGemQuery, populateGemStages } from "../services/gem.service.js"
+import { GEM_STATUSES, ROLES } from "../constants/index.js"
+import { createReportForGem } from "../services/report.service.js"
+
+// Shared field-extraction and null-coercion for test stage updates.
+// Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
+function applyTestData(stageData, body, userId) {
+  const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety } = body
+  const data = { ...stageData }
+  if (riMin !== undefined) data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
+  if (riMax !== undefined) data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+  if (sg !== undefined) data.sg = sg === "" || sg === null ? null : Number(sg)
+  if (hardnessMin !== undefined) data.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
+  if (hardnessMax !== undefined) data.hardnessMax = hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
+  if (selectedVariety !== undefined) data.selectedVariety = selectedVariety
+  if (observations !== undefined) data.observations = { ...(data.observations || {}), ...observations }
+  data.testerId = userId
+  data.timestamp = new Date()
+  data.correctionRequested = false
+  return data
+}
 
 // @desc    Get all gems
 // @route   GET /api/gems
 // @access  Private
 export const getGems = async (req, res) => {
   try {
-    const pageSize = Math.min(Number(req.query.limit) || 10, 100) // Cap at 100
-    const page = Math.max(Number(req.query.page) || 1, 1) // Minimum page 1
+    const pageSize = Math.min(Number(req.query.limit) || 10, 100)
+    const page = Math.max(Number(req.query.page) || 1, 1)
 
     const query = buildGemQuery(req.query, req.user)
     const count = await Gem.countDocuments(query)
@@ -22,7 +42,7 @@ export const getGems = async (req, res) => {
       .sort({ updatedAt: -1 })
       .limit(pageSize)
       .skip(pageSize * (page - 1))
-      .lean() // Faster queries when you don't need Mongoose documents
+      .lean()
 
     res.json({
       gems,
@@ -75,14 +95,11 @@ export const getGemById = async (req, res) => {
     const gem = await Gem.findById(req.params.id)
       .populate("currentAssignee", "name role")
       .populate("intake.helperId", "name role")
-      .populate("test1.testerId", "name role")
-      .populate("test2.testerId", "name role")
-      .populate("finalApproval.approverId", "name role")
       .populate("customerId", "customerName companyName")
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    res.json(gem)
+    res.json(await populateGemStages(gem))
   } catch (error) {
     console.error("Error fetching gem:", error)
     res.status(500).json({ message: "Error fetching gem", error: error.message })
@@ -97,7 +114,6 @@ export const intakeGem = async (req, res) => {
     const { color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds, reportTypes } =
       req.body
 
-    // Validation
     if (status !== GEM_STATUSES.DRAFT_INTAKE && (!color || !weight || !testerId1 || !testerId2)) {
       return res.status(400).json({
         message: "Missing required fields: color, weight, testerId1, testerId2",
@@ -125,8 +141,6 @@ export const intakeGem = async (req, res) => {
     })
 
     const createdGem = await gem.save()
-
-    // Populate before returning
     await createdGem.populate("currentAssignee", "name role")
     await createdGem.populate("intake.helperId", "name role")
 
@@ -142,31 +156,24 @@ export const intakeGem = async (req, res) => {
 // @access  Private
 export const updateGem = async (req, res) => {
   try {
-    console.log(req.body)
     const gem = await Gem.findById(req.params.id)
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Handle image update (replacing with new list of image IDs)
     if (req.body.imageIds && Array.isArray(req.body.imageIds)) {
       gem.images = req.body.imageIds
     }
 
-    // Allow deleting specific images if imageIdsToDelete is provided in body
     if (req.body.imageIdsToDelete) {
       const toDelete = Array.isArray(req.body.imageIdsToDelete)
         ? req.body.imageIdsToDelete
         : req.body.imageIdsToDelete.split(",")
 
       for (const id of toDelete) {
-        // Just remove from gem. Note: Image deletion is handled by deleteImage endpoint now if needed,
-        // but for backward compatibility we keep it here if they insist,
-        // although "separate edits" suggest managing images independently.
         gem.images = gem.images.filter((imgId) => imgId.toString() !== id.toString())
       }
     }
 
-    // Mapping tester IDs from frontend to model fields
     if (req.body.testerId1 !== undefined) {
       req.body.assignedTester1 = req.body.testerId1
       if (gem.status === GEM_STATUSES.DRAFT_INTAKE || gem.status === GEM_STATUSES.READY_FOR_T1)
@@ -177,61 +184,19 @@ export const updateGem = async (req, res) => {
       if (gem.status === GEM_STATUSES.READY_FOR_T2) req.body.currentAssignee = req.body.testerId2
     }
 
-    // Senior Way: Deep merge for stages to avoid wiping data (e.g. testerId, timestamp)
     Object.keys(req.body).forEach((key) => {
       const val = req.body[key]
       if (val === undefined) return
+      if (["test1", "test2", "finalApproval", "testerId1", "testerId2", "imageIdsToDelete"].includes(key)) return
 
-      // Handle nested stages (test1, test2, finalApproval)
-      if (
-        ["test1", "test2", "finalApproval"].includes(key) &&
-        typeof val === "object" &&
-        val !== null
-      ) {
-        // Build a merged object from existing + incoming data to guarantee Mongoose detects the change
-        const existing = gem[key] ? gem[key].toObject() : {}
-        const obsKey = key === "finalApproval" ? "finalObservations" : "observations"
-
-        const merged = {
-          ...existing,
-          ...(val.riMin !== undefined && {
-            riMin: val.riMin === "" || val.riMin === null ? null : Number(val.riMin),
-          }),
-          ...(val.riMax !== undefined && {
-            riMax: val.riMax === "" || val.riMax === null ? null : Number(val.riMax),
-          }),
-          ...(val.sg !== undefined && {
-            sg: val.sg === "" || val.sg === null ? null : Number(val.sg),
-          }),
-          ...(val.hardnessMin !== undefined && {
-            hardnessMin:
-              val.hardnessMin === "" || val.hardnessMin === null ? null : Number(val.hardnessMin),
-          }),
-          ...(val.hardnessMax !== undefined && {
-            hardnessMax:
-              val.hardnessMax === "" || val.hardnessMax === null ? null : Number(val.hardnessMax),
-          }),
-          ...(val.selectedVariety !== undefined && { selectedVariety: val.selectedVariety }),
-          ...(val.finalVariety !== undefined && { finalVariety: val.finalVariety }),
-          ...(val[obsKey] &&
-            typeof val[obsKey] === "object" && {
-              [obsKey]: { ...(existing[obsKey] || {}), ...val[obsKey] },
-            }),
-        }
-
-        gem[key] = merged
-        gem.markModified(key)
-      } else if (key === "weight") {
+      if (key === "weight") {
         gem[key] = val === "" || val === null ? null : Number(val)
       } else {
-        // Generic top-level fields
         gem[key] = val
       }
     })
 
     const updatedGem = await gem.save()
-
-    // Populate before returning
     await updatedGem.populate("currentAssignee", "name role")
     await updatedGem.populate("intake.helperId", "name role")
 
@@ -247,47 +212,39 @@ export const updateGem = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest1 = async (req, res) => {
   try {
-    const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety, status } =
-      req.body
-
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Build update object
-    const test1Data = { ...gem.test1.toObject() }
-    if (riMin !== undefined) test1Data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
-    if (riMax !== undefined) test1Data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
-    if (sg !== undefined) test1Data.sg = sg === "" || sg === null ? null : Number(sg)
-    if (hardnessMin !== undefined)
-      test1Data.hardnessMin =
-        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
-    if (hardnessMax !== undefined)
-      test1Data.hardnessMax =
-        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
-    if (selectedVariety !== undefined) test1Data.selectedVariety = selectedVariety
-    if (observations !== undefined) {
-      test1Data.observations = { ...(test1Data.observations || {}), ...observations }
+    if (gem.status === GEM_STATUSES.DONE) {
+      return res.status(403).json({ message: "Cannot edit a completed gem" })
     }
 
-    test1Data.testerId = req.user._id
-    test1Data.timestamp = new Date()
-    test1Data.correctionRequested = false
+    if (req.user.role === ROLES.TESTER && gem.assignedTester1?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to edit Test 1" })
+    }
 
-    gem.test1 = test1Data
+    const existing = await GemTest1.findOne({ gemId: gem._id })
+    const test1Data = applyTestData(existing?.toObject() || {}, req.body, req.user._id)
+    // Remove _id from existing data to avoid conflicts on upsert
+    delete test1Data._id
 
-    // Status transition if submitted
-    if (status === GEM_STATUSES.READY_FOR_T2) {
+    const updatedTest1 = await GemTest1.findOneAndUpdate(
+      { gemId: gem._id },
+      { $set: { ...test1Data, gemId: gem._id } },
+      { upsert: true, new: true },
+    ).populate("testerId", "name role")
+
+    if (req.body.status === GEM_STATUSES.READY_FOR_T2) {
       gem.status = GEM_STATUSES.READY_FOR_T2
       gem.currentAssignee = gem.assignedTester2
-    } else if (status) {
-      gem.status = status
+    } else if (req.body.status) {
+      gem.status = req.body.status
     }
 
     const updatedGem = await gem.save()
     await updatedGem.populate("currentAssignee", "name role")
-    await updatedGem.populate("test1.testerId", "name role")
 
-    res.json(updatedGem)
+    res.json({ gem: updatedGem, test1: updatedTest1 })
   } catch (error) {
     console.error("Error updating test 1:", error)
     res.status(500).json({ message: "Error updating test 1", error: error.message })
@@ -299,47 +256,38 @@ export const updateTest1 = async (req, res) => {
 // @access  Private/Tester/Admin
 export const updateTest2 = async (req, res) => {
   try {
-    const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety, status } =
-      req.body
-
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Build update object
-    const test2Data = { ...gem.test2.toObject() }
-    if (riMin !== undefined) test2Data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
-    if (riMax !== undefined) test2Data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
-    if (sg !== undefined) test2Data.sg = sg === "" || sg === null ? null : Number(sg)
-    if (hardnessMin !== undefined)
-      test2Data.hardnessMin =
-        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
-    if (hardnessMax !== undefined)
-      test2Data.hardnessMax =
-        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
-    if (selectedVariety !== undefined) test2Data.selectedVariety = selectedVariety
-    if (observations !== undefined) {
-      test2Data.observations = { ...(test2Data.observations || {}), ...observations }
+    if (gem.status === GEM_STATUSES.DONE) {
+      return res.status(403).json({ message: "Cannot edit a completed gem" })
     }
 
-    test2Data.testerId = req.user._id
-    test2Data.timestamp = new Date()
-    test2Data.correctionRequested = false
+    if (req.user.role === ROLES.TESTER && gem.assignedTester2?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to edit Test 2" })
+    }
 
-    gem.test2 = test2Data
+    const existing = await GemTest2.findOne({ gemId: gem._id })
+    const test2Data = applyTestData(existing?.toObject() || {}, req.body, req.user._id)
+    delete test2Data._id
 
-    // Status transition if submitted
-    if (status === GEM_STATUSES.READY_FOR_APPROVAL) {
+    const updatedTest2 = await GemTest2.findOneAndUpdate(
+      { gemId: gem._id },
+      { $set: { ...test2Data, gemId: gem._id } },
+      { upsert: true, new: true },
+    ).populate("testerId", "name role")
+
+    if (req.body.status === GEM_STATUSES.READY_FOR_APPROVAL) {
       gem.status = GEM_STATUSES.READY_FOR_APPROVAL
-      gem.currentAssignee = null // unassigned, ready for admin to pick up
-    } else if (status) {
-      gem.status = status
+      gem.currentAssignee = null
+    } else if (req.body.status) {
+      gem.status = req.body.status
     }
 
     const updatedGem = await gem.save()
     await updatedGem.populate("currentAssignee", "name role")
-    await updatedGem.populate("test2.testerId", "name role")
 
-    res.json(updatedGem)
+    res.json({ gem: updatedGem, test2: updatedTest2 })
   } catch (error) {
     console.error("Error updating test 2:", error)
     res.status(500).json({ message: "Error updating test 2", error: error.message })
@@ -366,64 +314,46 @@ export const updateFinalApproval = async (req, res) => {
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Build update object
-    const finalData = { ...gem.finalApproval.toObject() }
+    const existing = await GemFinalApproval.findOne({ gemId: gem._id })
+    const finalData = existing ? existing.toObject() : {}
+    delete finalData._id
+
     if (riMin !== undefined) finalData.riMin = riMin === "" || riMin === null ? null : Number(riMin)
     if (riMax !== undefined) finalData.riMax = riMax === "" || riMax === null ? null : Number(riMax)
     if (sg !== undefined) finalData.sg = sg === "" || sg === null ? null : Number(sg)
     if (hardnessMin !== undefined)
-      finalData.hardnessMin =
-        hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
+      finalData.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
     if (hardnessMax !== undefined)
-      finalData.hardnessMax =
-        hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
+      finalData.hardnessMax = hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
     if (finalVariety !== undefined) finalData.finalVariety = finalVariety
     if (finalObservations !== undefined) {
-      finalData.finalObservations = {
-        ...(finalData.finalObservations || {}),
-        ...finalObservations,
-      }
+      finalData.finalObservations = { ...(finalData.finalObservations || {}), ...finalObservations }
     }
 
     finalData.approverId = req.user._id
     finalData.timestamp = new Date()
 
-    gem.finalApproval = finalData
+    const updatedApproval = await GemFinalApproval.findOneAndUpdate(
+      { gemId: gem._id },
+      { $set: { ...finalData, gemId: gem._id } },
+      { upsert: true, new: true },
+    ).populate("approverId", "name role")
 
-    // Also update top-level itemDescription if provided
     if (itemDescription !== undefined) gem.itemDescription = itemDescription
 
-    // Status transition
     if (status) {
       gem.status = status
 
-      // Auto-generate report entry if submitted for report
       if (status === GEM_STATUSES.SUBMITTED_FOR_REPORT) {
-        // Check if report already exists
-        const existingReport = await Report.findOne({ gemId: gem._id })
-
-        if (!existingReport) {
-          const reportId = await generateReportId()
-
-          const newReport = new Report({
-            gemId: gem._id,
-            reportType: REPORT_TYPES.SMALL, // Default type
-            reportId,
-            issuedDate: new Date(),
-          })
-
-          const savedReport = await newReport.save()
-          gem.reportId = savedReport._id
-        }
+        gem.reportId = await createReportForGem(gem._id)
       }
     } else {
       gem.status = GEM_STATUSES.DRAFT_APPROVAL
     }
 
     const updatedGem = await gem.save()
-    await updatedGem.populate("finalApproval.approverId", "name role")
 
-    res.json(updatedGem)
+    res.json({ gem: updatedGem, finalApproval: updatedApproval })
   } catch (error) {
     console.error("Error updating final approval:", error)
     res.status(500).json({ message: "Error updating final approval", error: error.message })
@@ -439,12 +369,17 @@ export const deleteGem = async (req, res) => {
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    // Delete all images associated with the gem
     if (gem.images && gem.images.length > 0) {
       for (const imageId of gem.images) {
         await Image.findByIdAndDelete(imageId)
       }
     }
+
+    await Promise.all([
+      GemTest1.deleteOne({ gemId: gem._id }),
+      GemTest2.deleteOne({ gemId: gem._id }),
+      GemFinalApproval.deleteOne({ gemId: gem._id }),
+    ])
 
     await gem.deleteOne()
     res.json({ message: "Gem deleted successfully" })
@@ -454,7 +389,6 @@ export const deleteGem = async (req, res) => {
   }
 }
 
-//TODO
 // @desc    Request correction from a tester (Admin)
 // @route   PUT /api/gems/:id/request-correction
 // @access  Private/Admin
@@ -462,7 +396,6 @@ export const requestCorrection = async (req, res) => {
   try {
     const { stage, note } = req.body
 
-    // Validation
     if (!stage || !["test1", "test2"].includes(stage)) {
       return res.status(400).json({
         message: "Invalid stage. Must be 'test1' or 'test2'",
@@ -470,39 +403,36 @@ export const requestCorrection = async (req, res) => {
     }
 
     const gem = await Gem.findById(req.params.id)
-
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
     if (stage === "test1") {
-      if (!gem.test1 || !gem.test1.testerId) {
-        return res.status(400).json({
-          message: "Test 1 has not been completed yet",
-        })
+      const t1 = await GemTest1.findOne({ gemId: gem._id })
+      if (!t1 || !t1.testerId) {
+        return res.status(400).json({ message: "Test 1 has not been completed yet" })
       }
-      gem.test1.correctionRequested = true
-      gem.test1.correctionNote = note.trim()
+      await GemTest1.findOneAndUpdate(
+        { gemId: gem._id },
+        { correctionRequested: true, correctionNote: note.trim() },
+      )
       gem.status = GEM_STATUSES.READY_FOR_T1
       gem.currentAssignee = gem.assignedTester1
     } else if (stage === "test2") {
-      if (!gem.test2 || !gem.test2.testerId) {
-        return res.status(400).json({
-          message: "Test 2 has not been completed yet",
-        })
+      const t2 = await GemTest2.findOne({ gemId: gem._id })
+      if (!t2 || !t2.testerId) {
+        return res.status(400).json({ message: "Test 2 has not been completed yet" })
       }
-      gem.test2.correctionRequested = true
-      gem.test2.correctionNote = note.trim()
+      await GemTest2.findOneAndUpdate(
+        { gemId: gem._id },
+        { correctionRequested: true, correctionNote: note.trim() },
+      )
       gem.status = GEM_STATUSES.READY_FOR_T2
       gem.currentAssignee = gem.assignedTester2
     }
 
     const updatedGem = await gem.save()
-
-    // Populate before returning
     await updatedGem.populate("currentAssignee", "name role")
-    await updatedGem.populate("test1.testerId", "name role")
-    await updatedGem.populate("test2.testerId", "name role")
 
-    res.json(updatedGem)
+    res.json(await populateGemStages(updatedGem))
   } catch (error) {
     console.error("Error requesting correction:", error)
     res.status(500).json({ message: "Error requesting correction", error: error.message })
@@ -523,16 +453,13 @@ export const requestApproverCorrection = async (req, res) => {
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    const finalData = gem.finalApproval ? gem.finalApproval.toObject() : {}
-    finalData.approverCorrectionRequested = true
-    finalData.approverCorrectionNote = note.trim()
-    gem.finalApproval = finalData
-    gem.markModified("finalApproval")
+    await GemFinalApproval.findOneAndUpdate(
+      { gemId: gem._id },
+      { approverCorrectionRequested: true, approverCorrectionNote: note.trim() },
+    )
 
-    const updatedGem = await gem.save()
-    await updatedGem.populate("currentAssignee", "name role")
-
-    res.json(updatedGem)
+    await gem.populate("currentAssignee", "name role")
+    res.json(await populateGemStages(gem))
   } catch (error) {
     console.error("Error requesting approver correction:", error)
     res.status(500).json({ message: "Error requesting approver correction", error: error.message })
@@ -547,16 +474,13 @@ export const dismissApproverCorrection = async (req, res) => {
     const gem = await Gem.findById(req.params.id)
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
-    const finalData = gem.finalApproval ? gem.finalApproval.toObject() : {}
-    finalData.approverCorrectionRequested = false
-    finalData.approverCorrectionNote = ""
-    gem.finalApproval = finalData
-    gem.markModified("finalApproval")
+    await GemFinalApproval.findOneAndUpdate(
+      { gemId: gem._id },
+      { approverCorrectionRequested: false, approverCorrectionNote: "" },
+    )
 
-    const updatedGem = await gem.save()
-    await updatedGem.populate("currentAssignee", "name role")
-
-    res.json(updatedGem)
+    await gem.populate("currentAssignee", "name role")
+    res.json(await populateGemStages(gem))
   } catch (error) {
     console.error("Error dismissing approver correction:", error)
     res.status(500).json({ message: "Error dismissing approver correction", error: error.message })
@@ -570,9 +494,7 @@ export const addGemImages = async (req, res) => {
   try {
     const gem = await Gem.findById(req.params.id)
 
-    if (!gem) {
-      return res.status(404).json({ message: "Gem not found" })
-    }
+    if (!gem) return res.status(404).json({ message: "Gem not found" })
 
     const { imageIds } = req.body
 

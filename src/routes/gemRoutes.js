@@ -5,6 +5,7 @@ import {
   getGemById,
   intakeGem,
   updateGem,
+  deleteGem,
   addGemImages,
   requestCorrection,
   requestApproverCorrection,
@@ -26,6 +27,7 @@ gemRoutes
   .route("/:id")
   .get(protect, getGemById)
   .put(protect, authorize("ADMIN", "HELPER", "TESTER"), updateGem)
+  .delete(protect, authorize("ADMIN"), deleteGem)
 
 gemRoutes.put("/:id/test1", protect, authorize("TESTER", "ADMIN"), updateTest1)
 gemRoutes.put("/:id/test2", protect, authorize("TESTER", "ADMIN"), updateTest2)

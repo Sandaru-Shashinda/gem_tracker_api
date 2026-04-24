@@ -1,4 +1,3 @@
-// Constants
 export const GEM_STATUSES = {
   DRAFT_INTAKE: "DRAFT_INTAKE",
   TOOK_IN: "TOOK_IN",

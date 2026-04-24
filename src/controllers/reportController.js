@@ -1,6 +1,8 @@
 import Report from "../models/Report.js"
 import Gem from "../models/Gem.js"
-import { GEM_STATUSES } from "../const/const.js"
+import GemFinalApproval from "../models/GemFinalApproval.js"
+import { GEM_STATUSES } from "../constants/index.js"
+import { populateGemStages } from "../services/gem.service.js"
 
 // @desc    Get all reports
 // @route   GET /api/reports
@@ -35,7 +37,15 @@ export const getReportById = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id).populate("gemId")
     if (!report) return res.status(404).json({ message: "Report not found" })
-    res.json(report)
+
+    const finalApproval = await GemFinalApproval.findOne({ gemId: report.gemId._id })
+      .populate("approverId", "name role")
+      .lean()
+
+    res.json({
+      ...report.toObject(),
+      gemId: { ...report.gemId.toObject(), finalApproval: finalApproval || {} },
+    })
   } catch (error) {
     res.status(500).json({ message: "Error fetching report", error: error.message })
   }
@@ -46,32 +56,30 @@ export const getReportById = async (req, res) => {
 // @access  Public
 export const verifyReport = async (req, res) => {
   try {
-    const report = await Report.findOne({ reportId: req.params.reportId }).populate({
-      path: "gemId",
-      populate: [
-        { path: "intake.helperId", select: "name" },
-        { path: "test1.testerId", select: "name" },
-        { path: "test2.testerId", select: "name" },
-        { path: "finalApproval.approverId", select: "name" },
-      ],
-    })
+    const report = await Report.findOne({ reportId: req.params.reportId })
 
-    if (!report || !report.gemId) {
+    if (!report) {
       return res.status(404).json({ message: "Valid report not found for this ID" })
     }
 
-    const gem = report.gemId
+    const gem = await Gem.findById(report.gemId).populate("intake.helperId", "name")
+    if (!gem) {
+      return res.status(404).json({ message: "Valid report not found for this ID" })
+    }
 
-    // Return limited data for public verification
+    const finalApproval = await GemFinalApproval.findOne({ gemId: gem._id })
+      .populate("approverId", "name")
+      .lean()
+
     res.json({
       reportId: report.reportId,
       gemId: gem.gemId,
       status: gem.status,
-      identification: gem.finalApproval.finalVariety,
+      identification: finalApproval?.finalVariety,
       measurements: {
-        ri: gem.finalApproval.ri,
-        sg: gem.finalApproval.sg,
-        hardness: gem.finalApproval.hardness,
+        ri: finalApproval ? { min: finalApproval.riMin, max: finalApproval.riMax } : null,
+        sg: finalApproval?.sg,
+        hardness: finalApproval ? { min: finalApproval.hardnessMin, max: finalApproval.hardnessMax } : null,
       },
       descriptions: {
         weight: gem.weight,

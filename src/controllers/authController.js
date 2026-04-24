@@ -1,10 +1,11 @@
 import User from "../models/User.js"
-import generateToken from "../utils/generateToken.js"
+import asyncHandler from "../utils/asyncHandler.js"
+import { serializeUser, generateToken } from "../services/auth.service.js"
 
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
 // @access  Public
-export const loginUser = async (req, res) => {
+export const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body
   const user = await User.findOne({ email, isDeleted: { $ne: true } })
 
@@ -19,12 +20,12 @@ export const loginUser = async (req, res) => {
   } else {
     res.status(401).json({ message: "Invalid email or password" })
   }
-}
+})
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Private/Admin
-export const registerUser = async (req, res) => {
+export const registerUser = asyncHandler(async (req, res) => {
   const { password, role, name, age, dob, idNumber, address, email, phoneNumber } = req.body
 
   const userExists = await User.findOne({ email })
@@ -38,118 +39,77 @@ export const registerUser = async (req, res) => {
     return
   }
 
-  const user = await User.create({
-    password,
-    role,
-    name,
-    age,
-    dob,
-    idNumber,
-    address,
-    phoneNumber,
-    email,
-  })
+  const user = await User.create({ password, role, name, age, dob, idNumber, address, phoneNumber, email })
 
   if (user) {
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      role: user.role,
-      age: user.age,
-      dob: user.dob,
-      idNumber: user.idNumber,
-      phoneNumber: user.phoneNumber,
-      address: user.address,
-      email: user.email,
-    })
+    res.status(201).json(serializeUser(user))
   } else {
     res.status(400).json({ message: "Invalid user data" })
   }
-}
+})
 
 // @desc    Get user profile
 // @route   GET /api/auth/profile
 // @access  Private
-export const getUserProfile = async (req, res) => {
+export const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
 
   if (user) {
-    res.json({
-      _id: user._id,
-      name: user.name,
-      role: user.role,
-      age: user.age,
-      dob: user.dob,
-      idNumber: user.idNumber,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      email: user.email,
-    })
+    res.json(serializeUser(user))
   } else {
     res.status(404).json({ message: "User not found" })
   }
-}
+})
 
 // @desc    Get all users
 // @route   GET /api/auth/users
 // @access  Private/Admin
-export const getUsers = async (req, res) => {
+export const getUsers = asyncHandler(async (req, res) => {
   const filter = { isDeleted: { $ne: true } }
   if (req.query.role) filter.role = req.query.role
 
   const users = await User.find(filter)
   res.json(users)
-}
+})
 
 // @desc    Update user
 // @route   PUT /api/auth/users/:id
 // @access  Private/Admin
-export const updateUser = async (req, res) => {
+export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
 
-  if (user) {
-    user.name = req.body.name || user.name
-    user.role = req.body.role || user.role
-    user.age = req.body.age || user.age
-    user.dob = req.body.dob || user.dob
-    user.idNumber = req.body.idNumber || user.idNumber
-    user.address = req.body.address || user.address
-    user.phoneNumber = req.body.phoneNumber || user.phoneNumber
-
-    // Check if new email is already taken by another user
-    if (req.body.email && req.body.email !== user.email) {
-      const emailExists = await User.findOne({ email: req.body.email, _id: { $ne: user._id } })
-      if (emailExists) {
-        res.status(400).json({ message: "Email already in use" })
-        return
-      }
-      user.email = req.body.email
-    }
-
-    if (req.body.password) user.password = req.body.password
-
-    const updatedUser = await user.save()
-
-    res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      role: updatedUser.role,
-      age: updatedUser.age,
-      dob: updatedUser.dob,
-      idNumber: updatedUser.idNumber,
-      address: updatedUser.address,
-      phoneNumber: updatedUser.phoneNumber,
-      email: updatedUser.email,
-    })
-  } else {
+  if (!user) {
     res.status(404).json({ message: "User not found" })
+    return
   }
-}
+
+  user.name = req.body.name || user.name
+  user.role = req.body.role || user.role
+  user.age = req.body.age || user.age
+  user.dob = req.body.dob || user.dob
+  user.idNumber = req.body.idNumber || user.idNumber
+  user.address = req.body.address || user.address
+  user.phoneNumber = req.body.phoneNumber || user.phoneNumber
+
+  if (req.body.email && req.body.email !== user.email) {
+    const emailExists = await User.findOne({ email: req.body.email, _id: { $ne: user._id } })
+    if (emailExists) {
+      res.status(400).json({ message: "Email already in use" })
+      return
+    }
+    user.email = req.body.email
+  }
+
+  if (req.body.password) user.password = req.body.password
+
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
 
 // @desc    Soft delete user
 // @route   DELETE /api/auth/users/:id
 // @access  Private/Admin
-export const deleteUser = async (req, res) => {
+export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
 
   if (user) {
@@ -159,4 +119,4 @@ export const deleteUser = async (req, res) => {
   } else {
     res.status(404).json({ message: "User not found" })
   }
-}
+})

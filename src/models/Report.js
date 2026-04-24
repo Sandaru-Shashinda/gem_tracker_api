@@ -1,5 +1,5 @@
 import mongoose from "mongoose"
-import { REPORT_TYPES } from "../const/const.js"
+import { REPORT_TYPES } from "../constants/index.js"
 
 const reportSchema = new mongoose.Schema(
   {
