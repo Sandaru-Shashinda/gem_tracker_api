@@ -27,6 +27,7 @@ const observationsSchema = {
   colourGrade: Number,
   finalGrade: Number,
   isHeated: { type: Boolean, default: false },
+  showHeatInReport: { type: Boolean, default: false },
   isEmerald: { type: Boolean, default: false },
   isMixCut: { type: Boolean, default: false },
 }
