@@ -14,7 +14,7 @@ export const getReports = async (req, res) => {
 
     const count = await Report.countDocuments()
     const reports = await Report.find()
-      .populate("gemId", "gemId color weight status")
+      .populate("gemId", "gemId color weight status reportTypes")
       .sort({ createdAt: -1 })
       .limit(pageSize)
       .skip(pageSize * (page - 1))
