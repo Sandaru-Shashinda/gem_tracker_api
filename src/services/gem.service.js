@@ -45,11 +45,19 @@ export const buildGemQuery = (queryParams, user) => {
 
 export const populateGemStages = async (gem) => {
   const gemId = gem._id
-  const [test1, test2, finalApproval] = await Promise.all([
+  // Run all queries in parallel; include a lean gem fetch to access embedded
+  // legacy stage data that hasn't been migrated to separate collections yet.
+  const [test1, test2, finalApproval, rawGem] = await Promise.all([
     GemTest1.findOne({ gemId }).populate("testerId", "name role").lean(),
     GemTest2.findOne({ gemId }).populate("testerId", "name role").lean(),
     GemFinalApproval.findOne({ gemId }).populate("approverId", "name role").lean(),
+    Gem.findById(gemId).lean(),
   ])
   const { test1: _t1, test2: _t2, finalApproval: _fa, ...base } = gem.toObject ? gem.toObject() : gem
-  return { ...base, test1: test1 || null, test2: test2 || null, finalApproval: finalApproval || null }
+  return {
+    ...base,
+    test1: test1 ?? rawGem?.test1 ?? null,
+    test2: test2 ?? rawGem?.test2 ?? null,
+    finalApproval: finalApproval ?? rawGem?.finalApproval ?? null,
+  }
 }
