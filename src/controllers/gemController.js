@@ -3,7 +3,7 @@ import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import Image from "../models/Image.js"
-import { generateGemId, buildGemQuery, populateGemStages } from "../services/gem.service.js"
+import { buildGemQuery, populateGemStages } from "../services/gem.service.js"
 import { GEM_STATUSES, ROLES } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
 
@@ -106,21 +106,40 @@ export const getGemById = async (req, res) => {
   }
 }
 
+// @desc    Get the last created gem's GRC number
+// @route   GET /api/gems/last-grc
+// @access  Private
+export const getLastGrc = async (req, res) => {
+  try {
+    const gem = await Gem.findOne().sort({ createdAt: -1 }).select("gemId").lean()
+    res.json({ gemId: gem ? gem.gemId : null })
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching last GRC", error: error.message })
+  }
+}
+
 // @desc    Create a new gem (Intake)
 // @route   POST /api/gems/intake
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
   try {
-    const { color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds, reportTypes } =
+    const { gemId, color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds, reportTypes } =
       req.body
+
+    if (!gemId) {
+      return res.status(400).json({ message: "GRC Number is required" })
+    }
+
+    const duplicate = await Gem.findOne({ gemId })
+    if (duplicate) {
+      return res.status(400).json({ message: "A gem with this GRC Number already exists" })
+    }
 
     if (status !== GEM_STATUSES.DRAFT_INTAKE && (!color || !weight || !testerId1 || !testerId2)) {
       return res.status(400).json({
         message: "Missing required fields: color, weight, testerId1, testerId2",
       })
     }
-
-    const gemId = await generateGemId()
 
     const gem = new Gem({
       gemId,
@@ -187,7 +206,7 @@ export const updateGem = async (req, res) => {
     Object.keys(req.body).forEach((key) => {
       const val = req.body[key]
       if (val === undefined) return
-      if (["test1", "test2", "finalApproval", "testerId1", "testerId2", "imageIdsToDelete"].includes(key)) return
+      if (["gemId", "test1", "test2", "finalApproval", "testerId1", "testerId2", "imageIdsToDelete"].includes(key)) return
 
       if (key === "weight") {
         gem[key] = val === "" || val === null ? null : Number(val)

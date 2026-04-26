@@ -3,6 +3,7 @@ import {
   getGems,
   getDashboardStats,
   getGemById,
+  getLastGrc,
   intakeGem,
   updateGem,
   deleteGem,
@@ -20,6 +21,7 @@ const gemRoutes = express.Router()
 
 gemRoutes.route("/").get(protect, getGems)
 gemRoutes.get("/stats", protect, getDashboardStats)
+gemRoutes.get("/last-grc", protect, getLastGrc)
 
 gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), intakeGem)
 
