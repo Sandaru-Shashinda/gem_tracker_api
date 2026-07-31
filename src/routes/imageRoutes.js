@@ -15,7 +15,7 @@ imageRoutes.route("/").get(protect, getImages).post(protect, upload.single("imag
 
 imageRoutes
   .route("/:id")
-  .get(protect, getImageById)
+  .get(getImageById)
   .put(protect, updateImage)
   .delete(protect, deleteImage)
 

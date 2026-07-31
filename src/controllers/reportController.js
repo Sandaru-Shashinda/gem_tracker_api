@@ -1,5 +1,6 @@
 import Report from "../models/Report.js"
 import Gem from "../models/Gem.js"
+import Image from "../models/Image.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import { GEM_STATUSES } from "../constants/index.js"
 import { populateGemStages } from "../services/gem.service.js"
@@ -32,19 +33,30 @@ export const getReports = async (req, res) => {
 
 // @desc    Get single report by ID
 // @route   GET /api/reports/:id
-// @access  Private
+// @access  Public
 export const getReportById = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id).populate("gemId")
     if (!report) return res.status(404).json({ message: "Report not found" })
 
+    const gem = report.gemId.toObject()
+
     const finalApproval = await GemFinalApproval.findOne({ gemId: report.gemId._id })
       .populate("approverId", "name role")
       .lean()
 
+    // This route is public so the QR verification page works for anyone. Those
+    // visitors have no token and so cannot call the protected /api/images/:id,
+    // which left the report artwork blank. Ship the gem's images alongside the
+    // report instead — they are small data URIs and already public via the report.
+    const gemImages = await Image.find({ _id: { $in: gem.images || [] }, isDeleted: false })
+      .select("_id name url")
+      .lean()
+
     res.json({
       ...report.toObject(),
-      gemId: { ...report.gemId.toObject(), finalApproval: finalApproval || {} },
+      gemId: { ...gem, finalApproval: finalApproval || {} },
+      gemImages,
     })
   } catch (error) {
     res.status(500).json({ message: "Error fetching report", error: error.message })

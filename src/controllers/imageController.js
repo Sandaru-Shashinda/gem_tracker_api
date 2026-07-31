@@ -53,7 +53,7 @@ export const getImages = async (req, res) => {
 
 // @desc    Get image by ID
 // @route   GET /api/images/:id
-// @access  Private
+// @access  Public
 export const getImageById = async (req, res) => {
   try {
     const image = await Image.findById(req.params.id).populate("uploadedBy", "name role")
