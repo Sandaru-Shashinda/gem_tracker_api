@@ -123,8 +123,19 @@ export const getLastGrc = async (req, res) => {
 // @access  Private/Helper
 export const intakeGem = async (req, res) => {
   try {
-    const { gemId, color, weight, itemDescription, testerId1, testerId2, customerId, status, imageIds, reportTypes } =
-      req.body
+    const {
+      gemId,
+      color,
+      weight,
+      itemDescription,
+      testerId1,
+      testerId2,
+      customerId,
+      status,
+      imageIds,
+      reportTypes,
+      skipTesting,
+    } = req.body
 
     if (!gemId) {
       return res.status(400).json({ message: "GRC Number is required" })
@@ -135,22 +146,34 @@ export const intakeGem = async (req, res) => {
       return res.status(400).json({ message: "A gem with this GRC Number already exists" })
     }
 
-    if (status !== GEM_STATUSES.DRAFT_INTAKE && (!color || !weight || !testerId1 || !testerId2)) {
+    const bypassTesting = Boolean(skipTesting)
+    const isDraft = status === GEM_STATUSES.DRAFT_INTAKE
+
+    if (!isDraft && (!color || !weight)) {
+      return res.status(400).json({ message: "Missing required fields: color, weight" })
+    }
+
+    if (!isDraft && !bypassTesting && (!testerId1 || !testerId2)) {
       return res.status(400).json({
-        message: "Missing required fields: color, weight, testerId1, testerId2",
+        message: "Missing required fields: testerId1, testerId2",
       })
     }
 
+    // Bypassing the testing flow means no testers are assigned and the record
+    // lands directly on the approver's desk.
+    const initialStatus = !isDraft && bypassTesting ? GEM_STATUSES.READY_FOR_APPROVAL : status
+
     const gem = new Gem({
       gemId,
-      status,
+      status: initialStatus,
       color,
       weight: weight ? Number(weight) : null,
       itemDescription,
       images: imageIds || [],
-      assignedTester1: testerId1 || null,
-      assignedTester2: testerId2 || null,
-      currentAssignee: testerId1 || null,
+      skipTesting: bypassTesting,
+      assignedTester1: bypassTesting ? null : testerId1 || null,
+      assignedTester2: bypassTesting ? null : testerId2 || null,
+      currentAssignee: bypassTesting ? null : testerId1 || null,
       customerId: customerId || null,
       reportTypes: reportTypes || [],
       intake: {
@@ -194,13 +217,27 @@ export const updateGem = async (req, res) => {
     }
 
     if (req.body.testerId1 !== undefined) {
-      req.body.assignedTester1 = req.body.testerId1
+      req.body.assignedTester1 = req.body.testerId1 || null
       if (gem.status === GEM_STATUSES.DRAFT_INTAKE || gem.status === GEM_STATUSES.READY_FOR_T1)
-        req.body.currentAssignee = req.body.testerId1
+        req.body.currentAssignee = req.body.testerId1 || null
     }
     if (req.body.testerId2 !== undefined) {
-      req.body.assignedTester2 = req.body.testerId2
-      if (gem.status === GEM_STATUSES.READY_FOR_T2) req.body.currentAssignee = req.body.testerId2
+      req.body.assignedTester2 = req.body.testerId2 || null
+      if (gem.status === GEM_STATUSES.READY_FOR_T2)
+        req.body.currentAssignee = req.body.testerId2 || null
+    }
+
+    // Bypassing the testing flow drops the tester assignments and re-routes any
+    // Test 1 hand-off straight to approval. Applied after the tester block above
+    // so it always wins.
+    if (req.body.skipTesting !== undefined && Boolean(req.body.skipTesting)) {
+      req.body.skipTesting = true
+      req.body.assignedTester1 = null
+      req.body.assignedTester2 = null
+      req.body.currentAssignee = null
+      if (req.body.status === GEM_STATUSES.READY_FOR_T1) {
+        req.body.status = GEM_STATUSES.READY_FOR_APPROVAL
+      }
     }
 
     Object.keys(req.body).forEach((key) => {

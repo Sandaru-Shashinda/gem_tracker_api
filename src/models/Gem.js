@@ -23,6 +23,9 @@ const GemSchema = new mongoose.Schema(
     assignedTester2: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
     reportTypes: [String],
+
+    // When true the gem bypasses Test 1 / Test 2 and goes straight to final approval
+    skipTesting: { type: Boolean, default: false },
     // Intake specific
     intake: {
       helperId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
