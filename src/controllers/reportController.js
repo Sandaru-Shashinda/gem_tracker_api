@@ -49,8 +49,13 @@ export const getReportById = async (req, res) => {
     // visitors have no token and so cannot call the protected /api/images/:id,
     // which left the report artwork blank. Ship the gem's images alongside the
     // report instead — they are small data URIs and already public via the report.
+    //
+    // `metadata` carries the crop box the certificate needs to draw the stone at its
+    // measured size. Leaving it out here silently downgraded every QR visitor to the
+    // approximate fallback, while signed-in staff — who fetch the image itself — saw
+    // the sized version, so the same report looked different on a phone.
     const gemImages = await Image.find({ _id: { $in: gem.images || [] }, isDeleted: false })
-      .select("_id name url")
+      .select("_id name url metadata")
       .lean()
 
     res.json({
