@@ -23,7 +23,6 @@ const finalObservationsSchema = {
   itemDescription: String,
   specialNote: String,
   treatment: String,
-  colour: String,
   colourGrade: Number,
   finalGrade: Number,
   isHeated: { type: Boolean, default: false },

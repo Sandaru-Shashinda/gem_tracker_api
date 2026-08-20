@@ -25,6 +25,17 @@ function applyTestData(stageData, body, userId) {
   return data
 }
 
+// Colour is stored once, on the Gem. Intake records it first and the analysis form
+// overwrites it at every stage, so the intake card, the queue table, the reports and
+// the public verification endpoint all read the same field.
+function applyGemColour(gem, color) {
+  if (typeof color !== "string") return
+  const trimmed = color.trim()
+  // A half-filled draft must never wipe the colour recorded at intake.
+  if (!trimmed) return
+  gem.color = trimmed
+}
+
 // @desc    Get all gems
 // @route   GET /api/gems
 // @access  Private
@@ -290,6 +301,8 @@ export const updateTest1 = async (req, res) => {
       { upsert: true, new: true },
     ).populate("testerId", "name role")
 
+    applyGemColour(gem, req.body.color)
+
     if (req.body.status === GEM_STATUSES.READY_FOR_T2) {
       gem.status = GEM_STATUSES.READY_FOR_T2
       gem.currentAssignee = gem.assignedTester2
@@ -333,6 +346,8 @@ export const updateTest2 = async (req, res) => {
       { upsert: true, new: true },
     ).populate("testerId", "name role")
 
+    applyGemColour(gem, req.body.color)
+
     if (req.body.status === GEM_STATUSES.READY_FOR_APPROVAL) {
       gem.status = GEM_STATUSES.READY_FOR_APPROVAL
       gem.currentAssignee = null
@@ -356,6 +371,7 @@ export const updateTest2 = async (req, res) => {
 export const updateFinalApproval = async (req, res) => {
   try {
     const {
+      color,
       riMin,
       riMax,
       sg,
@@ -396,6 +412,8 @@ export const updateFinalApproval = async (req, res) => {
     ).populate("approverId", "name role")
 
     if (itemDescription !== undefined) gem.itemDescription = itemDescription
+
+    applyGemColour(gem, color)
 
     if (status) {
       gem.status = status

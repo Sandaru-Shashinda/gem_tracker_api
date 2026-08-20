@@ -12,6 +12,8 @@ const GemSchema = new mongoose.Schema(
     currentAssignee: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
     // Basic Info (from Intake)
+    // The gem's one and only colour. Intake records it first, the analysis form
+    // overwrites it at each test/approval stage; nothing stores a second copy.
     color: String,
     weight: Number, // Weight (ct)
 
