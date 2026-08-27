@@ -10,10 +10,9 @@ import { createReportForGem } from "../services/report.service.js"
 // Shared field-extraction and null-coercion for test stage updates.
 // Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
 function applyTestData(stageData, body, userId) {
-  const { riMin, riMax, sg, hardnessMin, hardnessMax, observations, selectedVariety } = body
+  const { ri, sg, hardnessMin, hardnessMax, observations, selectedVariety } = body
   const data = { ...stageData }
-  if (riMin !== undefined) data.riMin = riMin === "" || riMin === null ? null : Number(riMin)
-  if (riMax !== undefined) data.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+  if (ri !== undefined) data.ri = ri === "" || ri === null ? null : Number(ri)
   if (sg !== undefined) data.sg = sg === "" || sg === null ? null : Number(sg)
   if (hardnessMin !== undefined) data.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
   if (hardnessMax !== undefined) data.hardnessMax = hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
@@ -372,8 +371,7 @@ export const updateFinalApproval = async (req, res) => {
   try {
     const {
       color,
-      riMin,
-      riMax,
+      ri,
       sg,
       hardnessMin,
       hardnessMax,
@@ -390,8 +388,7 @@ export const updateFinalApproval = async (req, res) => {
     const finalData = existing ? existing.toObject() : {}
     delete finalData._id
 
-    if (riMin !== undefined) finalData.riMin = riMin === "" || riMin === null ? null : Number(riMin)
-    if (riMax !== undefined) finalData.riMax = riMax === "" || riMax === null ? null : Number(riMax)
+    if (ri !== undefined) finalData.ri = ri === "" || ri === null ? null : Number(ri)
     if (sg !== undefined) finalData.sg = sg === "" || sg === null ? null : Number(sg)
     if (hardnessMin !== undefined)
       finalData.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)

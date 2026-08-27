@@ -33,20 +33,19 @@ function scoreRange(testMin, testMax, refMin, refMax, decayTol) {
 // @access  Private
 export const searchReferences = async (req, res) => {
   try {
-    const { riMin, riMax, sg, hardnessMin, hardnessMax } = req.query
+    const { ri, sg, hardnessMin, hardnessMax } = req.query
 
-    const riMinVal = riMin      ? parseFloat(riMin)      : null
-    const riMaxVal = riMax      ? parseFloat(riMax)      : null
+    // R.I. is a single reading, so it is scored as a point against each reference's
+    // published R.I. range — the same way S.G. is. Hardness stays a min/max range.
+    const riVal    = ri         ? parseFloat(ri)         : null
     const sgVal    = sg         ? parseFloat(sg)         : null
     const hMinVal  = hardnessMin ? parseFloat(hardnessMin) : null
     const hMaxVal  = hardnessMax ? parseFloat(hardnessMax) : null
 
-    const effectiveRiMin = riMinVal ?? riMaxVal
-    const effectiveRiMax = riMaxVal ?? riMinVal
     const effectiveHMin  = hMinVal  ?? hMaxVal
     const effectiveHMax  = hMaxVal  ?? hMinVal
 
-    const hasRi       = effectiveRiMin !== null
+    const hasRi       = riVal !== null
     const hasSg       = sgVal !== null
     const hasHardness = effectiveHMin !== null
 
@@ -54,8 +53,8 @@ export const searchReferences = async (req, res) => {
 
     const query = {}
     if (hasRi) {
-      query.refractiveIndexMin = { $lte: effectiveRiMax + RI_EXPAND }
-      query.refractiveIndexMax = { $gte: effectiveRiMin - RI_EXPAND }
+      query.refractiveIndexMin = { $lte: riVal + RI_EXPAND }
+      query.refractiveIndexMax = { $gte: riVal - RI_EXPAND }
     }
     if (hasSg) {
       query.specificGravityMin = { $lte: sgVal + SG_EXPAND }
@@ -78,7 +77,7 @@ export const searchReferences = async (req, res) => {
     const results = candidates
       .map((ref) => {
         let score = 0
-        if (hasRi)       score += wRi * scoreRange(effectiveRiMin, effectiveRiMax, ref.refractiveIndexMin, ref.refractiveIndexMax, RI_DECAY_TOL)
+        if (hasRi)       score += wRi * scorePoint(riVal, ref.refractiveIndexMin, ref.refractiveIndexMax, RI_DECAY_TOL)
         if (hasSg)       score += wSg * scorePoint(sgVal, ref.specificGravityMin, ref.specificGravityMax, SG_DECAY_TOL)
         if (hasHardness) score += wH  * scoreRange(effectiveHMin, effectiveHMax, ref.hardnessMin, ref.hardnessMax, H_DECAY_TOL)
         return { ...ref, matchScore: Math.round(score * 100) }

@@ -34,8 +34,7 @@ const observationsSchema = {
 const GemTest2Schema = new mongoose.Schema(
   {
     gemId: { type: mongoose.Schema.Types.ObjectId, ref: "Gem", required: true, unique: true },
-    riMin: Number,
-    riMax: Number,
+    ri: Number,
     sg: Number,
     hardnessMin: Number,
     hardnessMax: Number,

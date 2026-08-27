@@ -94,7 +94,7 @@ export const verifyReport = async (req, res) => {
       status: gem.status,
       identification: finalApproval?.finalVariety,
       measurements: {
-        ri: finalApproval ? { min: finalApproval.riMin, max: finalApproval.riMax } : null,
+        ri: finalApproval?.ri ?? null,
         sg: finalApproval?.sg,
         hardness: finalApproval ? { min: finalApproval.hardnessMin, max: finalApproval.hardnessMax } : null,
       },
