@@ -28,6 +28,22 @@ const finalObservationsSchema = {
   itemDescription: String,
   specialNote: String,
   treatment: String,
+  // Per-treatment checklist printed on the large report. Each value is "Yes" | "No"
+  // or "" / absent when the lab has not assessed it — a deliberate tri-state, since
+  // "not tested" and "tested, not present" are different claims on a certificate.
+  // Keys and their section grouping are mirrored in the app's lib/treatments.ts.
+  treatments: {
+    heatTreatment: String,
+    irradiationTreatment: String,
+    hpht: String,
+    diffusionTreatment: String,
+    dyeing: String,
+    bleaching: String,
+    fractureFillingOil: String,
+    fractureFillingResinGlass: String,
+    laserDrilling: String,
+    coating: String,
+  },
   colourGrade: Number,
   finalGrade: Number,
   isHeated: { type: Boolean, default: false },
