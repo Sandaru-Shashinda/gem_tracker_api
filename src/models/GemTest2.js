@@ -19,6 +19,11 @@ const observationsSchema = {
   proportionGrade: String,
   clarityGrade: String,
   clarityEnhancement: String,
+  // Colour breakdown printed in the large report. Tone and saturation are
+  // graded Low | Medium | High.
+  hue: String,
+  tone: String,
+  saturation: String,
   comments: String,
   itemDescription: String,
   specialNote: String,

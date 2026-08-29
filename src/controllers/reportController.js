@@ -36,7 +36,9 @@ export const getReports = async (req, res) => {
 // @access  Public
 export const getReportById = async (req, res) => {
   try {
-    const report = await Report.findById(req.params.id).populate("gemId")
+    const report = await Report.findById(req.params.id)
+      .populate("gemId")
+      .populate("signedBy", "name role")
     if (!report) return res.status(404).json({ message: "Report not found" })
 
     const gem = report.gemId.toObject()
@@ -136,10 +138,13 @@ export const updateReport = async (req, res) => {
     const report = await Report.findById(req.params.id)
     if (!report) return res.status(404).json({ message: "Report not found" })
 
+    // signedBy is populated on the way out so the response matches the shape
+    // getReportById returns — the configuration page renders the preview straight
+    // from it and reads the signatory's name off the populated document.
     const updatedReport = await Report.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
-    })
+    }).populate("signedBy", "name role")
 
     // Update associated Gem status to DONE
     await Gem.findByIdAndUpdate(report.gemId, { status: GEM_STATUSES.DONE })

@@ -33,6 +33,13 @@ const reportSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // The consultant gemologist whose name is printed on the left-hand signature
+    // field of the medium and large reports. Held as a reference so the printed
+    // name tracks the user record instead of a copy of it.
+    signedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
 
   { timestamps: true },
