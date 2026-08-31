@@ -66,6 +66,10 @@ const GemFinalApprovalSchema = new mongoose.Schema(
     // One reading — what the lab measured. The species' published hardness range lives
     // on GemReference and is what this value is scored against.
     hardness: Number,
+    // The certificate's colour and weight. Seeded from the gem's most recent values —
+    // the last tester to record them — and editable by the approver from there.
+    colour: String,
+    weight: Number,
     finalObservations: finalObservationsSchema,
     approverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     timestamp: Date,

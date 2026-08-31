@@ -12,12 +12,14 @@ import { createReportForGem } from "../services/report.service.js"
 const toNumberOrNull = (value) => (value === "" || value === null ? null : Number(value))
 
 function applyTestData(stageData, body, userId) {
-  const { riMin, riMax, sg, hardness, observations, selectedVariety } = body
+  const { riMin, riMax, sg, hardness, colour, weight, observations, selectedVariety } = body
   const data = { ...stageData }
   if (riMin !== undefined) data.riMin = toNumberOrNull(riMin)
   if (riMax !== undefined) data.riMax = toNumberOrNull(riMax)
   if (sg !== undefined) data.sg = toNumberOrNull(sg)
   if (hardness !== undefined) data.hardness = toNumberOrNull(hardness)
+  if (colour !== undefined) data.colour = typeof colour === "string" ? colour.trim() : colour
+  if (weight !== undefined) data.weight = toNumberOrNull(weight)
   if (selectedVariety !== undefined) data.selectedVariety = selectedVariety
   if (observations !== undefined) data.observations = { ...(data.observations || {}), ...observations }
   data.testerId = userId
@@ -26,15 +28,17 @@ function applyTestData(stageData, body, userId) {
   return data
 }
 
-// Colour is stored once, on the Gem. Intake records it first and the analysis form
-// overwrites it at every stage, so the intake card, the queue table, the reports and
-// the public verification endpoint all read the same field.
-function applyGemColour(gem, color) {
-  if (typeof color !== "string") return
-  const trimmed = color.trim()
-  // A half-filled draft must never wipe the colour recorded at intake.
-  if (!trimmed) return
-  gem.color = trimmed
+// Each stage keeps the colour and weight its own owner recorded, and the Gem carries
+// the most recent of them. That gem-level pair is what the queue table, the reports, the
+// public verification endpoint and the approval form's seed all read, so "the gem's
+// latest" stays a single field rather than something every reader has to recompute.
+//
+// A blank is never written back: a half-filled draft must not wipe what intake recorded,
+// nor erase the previous tester's reading for the next one.
+function applyGemColourAndWeight(gem, colour, weight) {
+  if (typeof colour === "string" && colour.trim()) gem.color = colour.trim()
+  const parsed = toNumberOrNull(weight)
+  if (parsed !== null && Number.isFinite(parsed) && parsed > 0) gem.weight = parsed
 }
 
 // @desc    Get all gems
@@ -302,7 +306,7 @@ export const updateTest1 = async (req, res) => {
       { upsert: true, new: true },
     ).populate("testerId", "name role")
 
-    applyGemColour(gem, req.body.color)
+    applyGemColourAndWeight(gem, req.body.colour, req.body.weight)
 
     if (req.body.status === GEM_STATUSES.READY_FOR_T2) {
       gem.status = GEM_STATUSES.READY_FOR_T2
@@ -347,7 +351,7 @@ export const updateTest2 = async (req, res) => {
       { upsert: true, new: true },
     ).populate("testerId", "name role")
 
-    applyGemColour(gem, req.body.color)
+    applyGemColourAndWeight(gem, req.body.colour, req.body.weight)
 
     if (req.body.status === GEM_STATUSES.READY_FOR_APPROVAL) {
       gem.status = GEM_STATUSES.READY_FOR_APPROVAL
@@ -372,7 +376,8 @@ export const updateTest2 = async (req, res) => {
 export const updateFinalApproval = async (req, res) => {
   try {
     const {
-      color,
+      colour,
+      weight,
       riMin,
       riMax,
       sg,
@@ -394,6 +399,10 @@ export const updateFinalApproval = async (req, res) => {
     if (riMax !== undefined) finalData.riMax = toNumberOrNull(riMax)
     if (sg !== undefined) finalData.sg = toNumberOrNull(sg)
     if (hardness !== undefined) finalData.hardness = toNumberOrNull(hardness)
+    // The approval's own colour and weight: seeded from the gem's latest by the client,
+    // then whatever the approver settles on. This pair is what the certificate prints.
+    if (colour !== undefined) finalData.colour = typeof colour === "string" ? colour.trim() : colour
+    if (weight !== undefined) finalData.weight = toNumberOrNull(weight)
     if (finalVariety !== undefined) finalData.finalVariety = finalVariety
     if (finalObservations !== undefined) {
       finalData.finalObservations = { ...(finalData.finalObservations || {}), ...finalObservations }
@@ -410,7 +419,7 @@ export const updateFinalApproval = async (req, res) => {
 
     if (itemDescription !== undefined) gem.itemDescription = itemDescription
 
-    applyGemColour(gem, color)
+    applyGemColourAndWeight(gem, colour, weight)
 
     if (status) {
       gem.status = status

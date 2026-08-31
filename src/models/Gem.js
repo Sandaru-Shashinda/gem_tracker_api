@@ -12,8 +12,11 @@ const GemSchema = new mongoose.Schema(
     currentAssignee: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
     // Basic Info (from Intake)
-    // The gem's one and only colour. Intake records it first, the analysis form
-    // overwrites it at each test/approval stage; nothing stores a second copy.
+    // The gem's *latest* colour and weight: intake records them first, then each test
+    // and approval stage pushes its own reading up here as it saves. Every stage also
+    // keeps its own copy, so these two answer "where does the gem stand now" — which is
+    // what the queue table, the reports, the public verification endpoint and the
+    // approval form's seed all want — without those readers walking the stages.
     color: String,
     weight: Number, // Weight (ct)
 

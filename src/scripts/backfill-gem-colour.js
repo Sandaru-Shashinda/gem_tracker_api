@@ -1,4 +1,10 @@
 /**
+ * SUPERSEDED — do not run. Colour is per-stage again, alongside weight, so this script
+ * now collapses in the wrong direction and would drop each tester's own reading.
+ * migrate-stage-colour-weight.js is the current one. Kept because its notes record what
+ * happened to the data: it is why stages written before the split hold no colour of
+ * their own, and why the newer script has to reconstruct them from the gem.
+ *
  * One-time backfill: colour used to be stored per test stage as
  * observations.colour / finalObservations.colour, while the gem kept whatever
  * intake typed. Reports, the queue table and the public verification endpoint

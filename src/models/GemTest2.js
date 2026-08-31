@@ -66,6 +66,12 @@ const GemTest2Schema = new mongoose.Schema(
     // One reading — what the lab measured. The species' published hardness range lives
     // on GemReference and is what this value is scored against.
     hardness: Number,
+    // Colour and weight as this stage's owner recorded them. Each tester observes the
+    // stone independently, so these are separate readings rather than copies of one
+    // value — the gem's own color/weight track the most recent of them, which is what
+    // the reports and the approval stage read.
+    colour: String,
+    weight: Number,
     observations: observationsSchema,
     testerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     timestamp: Date,
