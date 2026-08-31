@@ -1,4 +1,9 @@
 /**
+ * SUPERSEDED — do not run. R.I. is a range again, so this script now migrates in the
+ * wrong direction; migrate-ri-range-hardness-single.js is the current one. It is kept
+ * because its notes record what happened to the data, and because a database where its
+ * --drop-pair step was run needs that history to make sense of the rebuilt ranges.
+ *
  * One-time migration: R.I. used to be stored as a riMin/riMax pair on every test
  * stage, but the form now records a single reading, and the reference matcher
  * scores that value as a point against each species' published R.I. range.

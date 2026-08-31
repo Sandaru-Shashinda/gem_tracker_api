@@ -55,10 +55,17 @@ const observationsSchema = {
 const GemTest1Schema = new mongoose.Schema(
   {
     gemId: { type: mongoose.Schema.Types.ObjectId, ref: "Gem", required: true, unique: true },
+    // R.I. is a range: a doubly refractive stone gives two readings (birefringence).
+    // riMax is absent for a singly refractive stone and every reader treats that as
+    // "the same reading as riMin". Records written while R.I. was a single value keep
+    // their `ri`, which the app reads as a fallback for both ends.
+    riMin: Number,
+    riMax: Number,
     ri: Number,
     sg: Number,
-    hardnessMin: Number,
-    hardnessMax: Number,
+    // One reading — what the lab measured. The species' published hardness range lives
+    // on GemReference and is what this value is scored against.
+    hardness: Number,
     observations: observationsSchema,
     testerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     timestamp: Date,

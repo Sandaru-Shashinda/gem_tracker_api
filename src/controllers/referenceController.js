@@ -33,36 +33,41 @@ function scoreRange(testMin, testMax, refMin, refMax, decayTol) {
 // @access  Private
 export const searchReferences = async (req, res) => {
   try {
-    const { ri, sg, hardnessMin, hardnessMax } = req.query
+    const { riMin, riMax, sg, hardness } = req.query
 
-    // R.I. is a single reading, so it is scored as a point against each reference's
-    // published R.I. range — the same way S.G. is. Hardness stays a min/max range.
-    const riVal    = ri         ? parseFloat(ri)         : null
-    const sgVal    = sg         ? parseFloat(sg)         : null
-    const hMinVal  = hardnessMin ? parseFloat(hardnessMin) : null
-    const hMaxVal  = hardnessMax ? parseFloat(hardnessMax) : null
+    // R.I. is a range: a doubly refractive stone gives two readings, so it is scored as
+    // an overlap against each reference's published R.I. range. S.G. and hardness are
+    // single readings and are scored as points against theirs.
+    const riMinVal   = riMin    ? parseFloat(riMin)    : null
+    const riMaxVal   = riMax    ? parseFloat(riMax)    : null
+    const sgVal      = sg       ? parseFloat(sg)       : null
+    const hardnessVal = hardness ? parseFloat(hardness) : null
 
-    const effectiveHMin  = hMinVal  ?? hMaxVal
-    const effectiveHMax  = hMaxVal  ?? hMinVal
+    // One reading recorded on its own stands for both ends of the range. Readings are
+    // also ordered here, since a stone can be entered high-then-low.
+    const lowRi  = riMinVal ?? riMaxVal
+    const highRi = riMaxVal ?? riMinVal
+    const effectiveRiMin = lowRi === null ? null : Math.min(lowRi, highRi)
+    const effectiveRiMax = highRi === null ? null : Math.max(lowRi, highRi)
 
-    const hasRi       = riVal !== null
+    const hasRi       = effectiveRiMin !== null
     const hasSg       = sgVal !== null
-    const hasHardness = effectiveHMin !== null
+    const hasHardness = hardnessVal !== null
 
     if (!hasRi && !hasSg && !hasHardness) return res.json([])
 
     const query = {}
     if (hasRi) {
-      query.refractiveIndexMin = { $lte: riVal + RI_EXPAND }
-      query.refractiveIndexMax = { $gte: riVal - RI_EXPAND }
+      query.refractiveIndexMin = { $lte: effectiveRiMax + RI_EXPAND }
+      query.refractiveIndexMax = { $gte: effectiveRiMin - RI_EXPAND }
     }
     if (hasSg) {
       query.specificGravityMin = { $lte: sgVal + SG_EXPAND }
       query.specificGravityMax = { $gte: sgVal - SG_EXPAND }
     }
     if (hasHardness) {
-      query.hardnessMin = { $lte: effectiveHMax + H_EXPAND }
-      query.hardnessMax = { $gte: effectiveHMin - H_EXPAND }
+      query.hardnessMin = { $lte: hardnessVal + H_EXPAND }
+      query.hardnessMax = { $gte: hardnessVal - H_EXPAND }
     }
 
     const candidates = await GemReference.find(query).lean()
@@ -77,9 +82,9 @@ export const searchReferences = async (req, res) => {
     const results = candidates
       .map((ref) => {
         let score = 0
-        if (hasRi)       score += wRi * scorePoint(riVal, ref.refractiveIndexMin, ref.refractiveIndexMax, RI_DECAY_TOL)
+        if (hasRi)       score += wRi * scoreRange(effectiveRiMin, effectiveRiMax, ref.refractiveIndexMin, ref.refractiveIndexMax, RI_DECAY_TOL)
         if (hasSg)       score += wSg * scorePoint(sgVal, ref.specificGravityMin, ref.specificGravityMax, SG_DECAY_TOL)
-        if (hasHardness) score += wH  * scoreRange(effectiveHMin, effectiveHMax, ref.hardnessMin, ref.hardnessMax, H_DECAY_TOL)
+        if (hasHardness) score += wH  * scorePoint(hardnessVal, ref.hardnessMin, ref.hardnessMax, H_DECAY_TOL)
         return { ...ref, matchScore: Math.round(score * 100) }
       })
       .filter((ref) => ref.matchScore >= MIN_SCORE)

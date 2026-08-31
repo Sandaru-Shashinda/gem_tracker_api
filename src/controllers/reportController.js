@@ -96,9 +96,15 @@ export const verifyReport = async (req, res) => {
       status: gem.status,
       identification: finalApproval?.finalVariety,
       measurements: {
-        ri: finalApproval?.ri ?? null,
+        // R.I. is the range the lab read; `ri` is the single value older records hold.
+        ri: finalApproval
+          ? {
+              min: finalApproval.riMin ?? finalApproval.ri ?? null,
+              max: finalApproval.riMax ?? finalApproval.ri ?? null,
+            }
+          : null,
         sg: finalApproval?.sg,
-        hardness: finalApproval ? { min: finalApproval.hardnessMin, max: finalApproval.hardnessMax } : null,
+        hardness: finalApproval?.hardness ?? finalApproval?.hardnessMin ?? null,
       },
       descriptions: {
         weight: gem.weight,

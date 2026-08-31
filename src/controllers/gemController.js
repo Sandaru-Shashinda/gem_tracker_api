@@ -9,13 +9,15 @@ import { createReportForGem } from "../services/report.service.js"
 
 // Shared field-extraction and null-coercion for test stage updates.
 // Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
+const toNumberOrNull = (value) => (value === "" || value === null ? null : Number(value))
+
 function applyTestData(stageData, body, userId) {
-  const { ri, sg, hardnessMin, hardnessMax, observations, selectedVariety } = body
+  const { riMin, riMax, sg, hardness, observations, selectedVariety } = body
   const data = { ...stageData }
-  if (ri !== undefined) data.ri = ri === "" || ri === null ? null : Number(ri)
-  if (sg !== undefined) data.sg = sg === "" || sg === null ? null : Number(sg)
-  if (hardnessMin !== undefined) data.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
-  if (hardnessMax !== undefined) data.hardnessMax = hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
+  if (riMin !== undefined) data.riMin = toNumberOrNull(riMin)
+  if (riMax !== undefined) data.riMax = toNumberOrNull(riMax)
+  if (sg !== undefined) data.sg = toNumberOrNull(sg)
+  if (hardness !== undefined) data.hardness = toNumberOrNull(hardness)
   if (selectedVariety !== undefined) data.selectedVariety = selectedVariety
   if (observations !== undefined) data.observations = { ...(data.observations || {}), ...observations }
   data.testerId = userId
@@ -371,10 +373,10 @@ export const updateFinalApproval = async (req, res) => {
   try {
     const {
       color,
-      ri,
+      riMin,
+      riMax,
       sg,
-      hardnessMin,
-      hardnessMax,
+      hardness,
       finalObservations,
       finalVariety,
       itemDescription,
@@ -388,12 +390,10 @@ export const updateFinalApproval = async (req, res) => {
     const finalData = existing ? existing.toObject() : {}
     delete finalData._id
 
-    if (ri !== undefined) finalData.ri = ri === "" || ri === null ? null : Number(ri)
-    if (sg !== undefined) finalData.sg = sg === "" || sg === null ? null : Number(sg)
-    if (hardnessMin !== undefined)
-      finalData.hardnessMin = hardnessMin === "" || hardnessMin === null ? null : Number(hardnessMin)
-    if (hardnessMax !== undefined)
-      finalData.hardnessMax = hardnessMax === "" || hardnessMax === null ? null : Number(hardnessMax)
+    if (riMin !== undefined) finalData.riMin = toNumberOrNull(riMin)
+    if (riMax !== undefined) finalData.riMax = toNumberOrNull(riMax)
+    if (sg !== undefined) finalData.sg = toNumberOrNull(sg)
+    if (hardness !== undefined) finalData.hardness = toNumberOrNull(hardness)
     if (finalVariety !== undefined) finalData.finalVariety = finalVariety
     if (finalObservations !== undefined) {
       finalData.finalObservations = { ...(finalData.finalObservations || {}), ...finalObservations }
