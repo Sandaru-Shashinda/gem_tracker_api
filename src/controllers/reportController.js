@@ -70,19 +70,44 @@ export const getReportById = async (req, res) => {
   }
 }
 
+/** Anchored, case-insensitive exact match — customers rarely type the case we print. */
+const exactInsensitive = (value) => ({
+  $regex: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+  $options: "i",
+})
+
 // @desc    Verify/View digital report data
 // @route   GET /api/reports/:reportId/verify
 // @access  Public
 export const verifyReport = async (req, res) => {
   try {
-    const report = await Report.findOne({ reportId: req.params.reportId })
+    const identifier = (req.params.reportId || "").trim()
 
-    if (!report) {
+    if (!identifier) {
       return res.status(404).json({ message: "Valid report not found for this ID" })
     }
 
-    const gem = await Gem.findById(report.gemId).populate("intake.helperId", "name")
-    if (!gem) {
+    // Two different numbers reach this route. Staff quote the report number
+    // (REP-YYYY-MM-NNNNN), but the number printed on the certificate under
+    // "GRC Number" is the gem's id (GRC-YYYY-MM-NNNNN) — that is the one a
+    // customer holding a certificate will type. Matching only the former sent
+    // every such visitor to a "not found" page for a certificate we had issued.
+    let report = await Report.findOne({ reportId: exactInsensitive(identifier) })
+    let gem = null
+
+    if (report) {
+      gem = await Gem.findById(report.gemId).populate("intake.helperId", "name")
+    } else {
+      gem = await Gem.findOne({ gemId: exactInsensitive(identifier) }).populate(
+        "intake.helperId",
+        "name",
+      )
+      if (gem) {
+        report = await Report.findOne({ gemId: gem._id }).sort({ createdAt: -1 })
+      }
+    }
+
+    if (!report || !gem) {
       return res.status(404).json({ message: "Valid report not found for this ID" })
     }
 
@@ -91,6 +116,12 @@ export const verifyReport = async (req, res) => {
       .lean()
 
     res.json({
+      // The public site looks a certificate up by its printed GRC number, but the
+      // full report view is addressed by _id — the same value the certificate QR
+      // encodes. Returning it here is what lets a typed-in number land on exactly
+      // the page a scan produces, instead of a second, thinner summary of it.
+      _id: report._id,
+      reportType: report.reportType,
       reportId: report.reportId,
       gemId: gem.gemId,
       status: gem.status,
