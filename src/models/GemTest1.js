@@ -19,10 +19,8 @@ const observationsSchema = {
   proportionGrade: String,
   clarityGrade: String,
   clarityEnhancement: String,
-  // Colour breakdown printed in the large report. Base colour is the plain colour
-  // name the stone is filed under — the hue is the full description written on top
-  // of it. Tone and saturation are graded Low | Medium | High.
-  baseColour: String,
+  // Colour breakdown printed in the large report. Tone and saturation are graded
+  // Low | Medium | High.
   hue: String,
   tone: String,
   saturation: String,
@@ -45,6 +43,7 @@ const observationsSchema = {
     fractureFillingResinGlass: String,
     laserDrilling: String,
     coating: String,
+    assembledStone: String,
   },
   colourGrade: Number,
   finalGrade: Number,
