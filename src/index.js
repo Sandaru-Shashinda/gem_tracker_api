@@ -14,6 +14,8 @@ import referenceRoutes from "./routes/referenceRoutes.js"
 import reportRoutes from "./routes/reportRoutes.js"
 import customerRoutes from "./routes/customerRoutes.js"
 import imageRoutes from "./routes/imageRoutes.js"
+import contactRoutes from "./routes/contactRoutes.js"
+import postRoutes from "./routes/postRoutes.js"
 
 dotenv.config()
 connectDB()
@@ -49,6 +51,8 @@ app.use("/api/customers", customerRoutes)
 app.use("/api/references", referenceRoutes)
 app.use("/api/reports", reportRoutes)
 app.use("/api/images", imageRoutes)
+app.use("/api/contact", contactRoutes)
+app.use("/api/posts", postRoutes)
 
 // Error handling middleware (add at the end)
 app.use((err, req, res, next) => {

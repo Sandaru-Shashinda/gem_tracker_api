@@ -29,3 +29,22 @@ export const REPORT_TYPES = {
   LARGE: "large",
   VERBAL: "verbal",
 }
+
+export const CONTACT_STATUSES = {
+  NEW: "NEW",
+  READ: "READ",
+  ARCHIVED: "ARCHIVED",
+}
+
+export const POST_STATUSES = {
+  DRAFT: "DRAFT",
+  PUBLISHED: "PUBLISHED",
+  ARCHIVED: "ARCHIVED",
+}
+
+// Slugs match the categories already linked from the grc.lk navigation.
+export const POST_CATEGORIES = {
+  BLOG: "blog",
+  GRC_NEWS: "grc-news",
+  UNCATEGORIZED: "uncategorized",
+}
