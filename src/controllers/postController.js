@@ -2,6 +2,7 @@ import Post from "../models/Post.js"
 import { POST_CATEGORIES, POST_STATUSES, ROLES } from "../constants/index.js"
 import { uniqueSlug } from "../utils/slugify.js"
 import { handleImageUpload } from "../services/image.service.js"
+import { richTextToPlain, sanitizeRichText } from "../utils/richText.js"
 
 const AUTHOR_FIELDS = "name email role"
 const PUBLIC_FIELDS = "title slug excerpt body category coverImage publishedAt createdAt"
@@ -16,9 +17,13 @@ const canEdit = (post, user) =>
   (String(post.author?._id || post.author) === String(user._id) &&
     post.status === POST_STATUSES.DRAFT)
 
-/** Derives the excerpt shown on the grc.lk card when the author left it blank. */
+/**
+ * Derives the excerpt shown on the grc.lk card when the author left it blank.
+ * The card prints the excerpt as text, so the body's markup is flattened away
+ * rather than carried into a field that would show its tags.
+ */
 const deriveExcerpt = (body) => {
-  const flat = asText(body).replace(/\s+/g, " ")
+  const flat = richTextToPlain(body)
   if (flat.length <= 200) return flat
   return `${flat.slice(0, 197).trimEnd()}…`
 }
@@ -45,6 +50,9 @@ export const getPosts = async (req, res) => {
       query.author = req.user._id
     }
     if (req.query.search) {
+      // The body is searched as stored, markup and all, so a term that happens to
+      // be an HTML keyword ("strong", "href") matches more than the reader meant.
+      // Subject-word searches, which is what this box is used for, are unaffected.
       const searchRegex = { $regex: req.query.search, $options: "i" }
       query.$or = [{ title: searchRegex }, { excerpt: searchRegex }, { body: searchRegex }]
     }
@@ -78,11 +86,14 @@ export const getPosts = async (req, res) => {
 export const createPost = async (req, res) => {
   try {
     const title = asText(req.body.title)
-    const body = asText(req.body.body)
+    // Rich text from the editor, rebuilt from the allowlist before it is stored.
+    // Emptiness is judged on the words rather than the markup: an editor the
+    // author never typed into still submits "<p></p>".
+    const body = sanitizeRichText(req.body.body)
 
     const errors = {}
     if (!title) errors.title = "A title is required."
-    if (!body) errors.body = "The post needs some content."
+    if (!richTextToPlain(body)) errors.body = "The post needs some content."
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ message: "Please complete the post.", errors })
     }
@@ -152,8 +163,8 @@ export const updatePost = async (req, res) => {
     }
 
     if (req.body.body !== undefined) {
-      const body = asText(req.body.body)
-      if (!body) {
+      const body = sanitizeRichText(req.body.body)
+      if (!richTextToPlain(body)) {
         return res.status(400).json({
           message: "Please complete the post.",
           errors: { body: "The post needs some content." },

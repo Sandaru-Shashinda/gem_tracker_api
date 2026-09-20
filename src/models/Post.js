@@ -15,7 +15,14 @@ const PostSchema = new mongoose.Schema(
     /** Addresses the post on grc.lk (/post/<slug>); unique across live posts. */
     slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
     excerpt: { type: String, trim: true, maxlength: 400, default: "" },
-    body: { type: String, required: true, maxlength: 40000 },
+    /**
+     * Rich text, stored as the sanitised HTML the API rebuilds on every write —
+     * never as whatever the editor submitted. The cap is generous because markup
+     * inflates the same article several times over; it bounds the document, it is
+     * not a word count. Posts written before the editor existed are plain text
+     * and still render, so nothing needed migrating.
+     */
+    body: { type: String, required: true, maxlength: 120000 },
 
     category: {
       type: String,
