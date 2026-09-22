@@ -42,6 +42,7 @@ const observationsSchema = {
     fractureFillingOil: String,
     fractureFillingResinGlass: String,
     laserDrilling: String,
+    hpnt: String,
     coating: String,
     assembledStone: String,
   },
