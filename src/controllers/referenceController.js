@@ -1,4 +1,7 @@
 import GemReference from "../models/GemReference.js"
+import GemTest1 from "../models/GemTest1.js"
+import GemTest2 from "../models/GemTest2.js"
+import GemFinalApproval from "../models/GemFinalApproval.js"
 
 const RI_EXPAND    = 0.5
 const SG_EXPAND    = 1.0
@@ -115,6 +118,76 @@ export const getAllSpecies = async (req, res) => {
   try {
     const species = await GemReference.distinct("species")
     res.json(species.filter(Boolean).sort())
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message })
+  }
+}
+
+/**
+ * Folds several name lists into one sorted list, matching case-insensitively so a
+ * tester's "sapphire" does not sit in the dropdown beside the table's "Sapphire".
+ * The first spelling seen wins, which is why the reference table is passed first.
+ */
+const mergeNames = (...lists) => {
+  const seen = new Map()
+  for (const list of lists) {
+    for (const raw of list) {
+      if (typeof raw !== "string") continue
+      const name = raw.trim()
+      if (!name) continue
+      const key = name.toLowerCase()
+      if (!seen.has(key)) seen.set(key, name)
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
+}
+
+// @desc    Every species and variety the lab has on file: the published reference table
+//          plus every name actually recorded on a gem. Both identification fields take
+//          free text — a stone the table does not cover still has to be named — so what
+//          one tester types is history the next tester should be offered.
+// @route   GET /api/references/identifications
+// @access  Private
+export const getIdentifications = async (req, res) => {
+  try {
+    const [
+      refSpecies,
+      refVarieties,
+      t1Species,
+      t1Varieties,
+      t1Selected,
+      t2Species,
+      t2Varieties,
+      t2Selected,
+      approvalSpecies,
+      approvalVarieties,
+      approvalSelected,
+    ] = await Promise.all([
+      GemReference.distinct("species"),
+      GemReference.distinct("variety"),
+      GemTest1.distinct("observations.species"),
+      GemTest1.distinct("observations.variety"),
+      GemTest1.distinct("selectedVariety"),
+      GemTest2.distinct("observations.species"),
+      GemTest2.distinct("observations.variety"),
+      GemTest2.distinct("selectedVariety"),
+      GemFinalApproval.distinct("finalObservations.species"),
+      GemFinalApproval.distinct("finalObservations.variety"),
+      GemFinalApproval.distinct("finalVariety"),
+    ])
+
+    res.json({
+      species: mergeNames(refSpecies, t1Species, t2Species, approvalSpecies),
+      varieties: mergeNames(
+        refVarieties,
+        t1Varieties,
+        t1Selected,
+        t2Varieties,
+        t2Selected,
+        approvalVarieties,
+        approvalSelected,
+      ),
+    })
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message })
   }

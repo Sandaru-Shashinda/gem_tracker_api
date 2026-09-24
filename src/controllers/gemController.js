@@ -3,7 +3,7 @@ import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import Image from "../models/Image.js"
-import { buildGemQuery, populateGemStages } from "../services/gem.service.js"
+import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
 import { GEM_STATUSES, ROLES } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
 
@@ -26,6 +26,34 @@ function applyTestData(stageData, body, userId) {
   data.timestamp = new Date()
   data.correctionRequested = false
   return data
+}
+
+// A tester owns their stage only while the gem is sitting in it. Submitting hands the
+// stone on, and that seals their record: the next stage reads it, and a reading that can
+// be rewritten afterwards is not the independent second opinion the workflow is built on.
+// Reopening it is the admin's call — requestCorrection moves the gem back to the stage,
+// and write access follows from the move. The app mirrors this in resolveActiveStage.
+const TESTER_WRITABLE_AT = {
+  test1: [GEM_STATUSES.READY_FOR_T1, GEM_STATUSES.DRAFT_TEST_1],
+  test2: [GEM_STATUSES.READY_FOR_T2, GEM_STATUSES.DRAFT_TEST_2],
+}
+
+/**
+ * Why this tester may not write to this stage, or null when they may. Admins are not
+ * held to either rule: they own whichever stage the gem sits in.
+ */
+function describeStageDenial(gem, user, stage) {
+  if (user.role !== ROLES.TESTER) return null
+
+  const assignee = stage === "test1" ? gem.assignedTester1 : gem.assignedTester2
+  const label = stage === "test1" ? "Test 1" : "Test 2"
+  if (assignee?.toString() !== user._id.toString()) {
+    return `Not authorized to edit ${label}`
+  }
+  if (!TESTER_WRITABLE_AT[stage].includes(gem.status)) {
+    return `${label} has already been submitted and can no longer be edited. Ask an admin to request a correction.`
+  }
+  return null
 }
 
 // Each stage keeps the colour and weight its own owner recorded, and the Gem carries
@@ -169,9 +197,12 @@ export const intakeGem = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields: color, weight" })
     }
 
-    if (!isDraft && !bypassTesting && (!testerId1 || !testerId2)) {
+    // Only the first reading is compulsory. Leaving Tester 2 unassigned is a real
+    // choice — the stone gets one reading and goes straight to approval — so it is not
+    // treated as a missing field. See the Test 1 hand-off in updateTest1.
+    if (!isDraft && !bypassTesting && !testerId1) {
       return res.status(400).json({
-        message: "Missing required fields: testerId1, testerId2",
+        message: "Missing required field: testerId1",
       })
     }
 
@@ -239,8 +270,23 @@ export const updateGem = async (req, res) => {
     }
     if (req.body.testerId2 !== undefined) {
       req.body.assignedTester2 = req.body.testerId2 || null
-      if (gem.status === GEM_STATUSES.READY_FOR_T2)
-        req.body.currentAssignee = req.body.testerId2 || null
+      // The second reading is optional, so it can also be taken away again. Doing that
+      // while the gem is waiting on it would leave it with nobody to pick it up, so it
+      // moves on to approval instead — the same place Test 1 hands off to when no second
+      // tester was ever assigned. Judged against where this request leaves the gem rather
+      // than where it found it, since an intake edit that rewinds the gem to Test 1 has
+      // already answered the question.
+      const targetStatus = req.body.status || gem.status
+      const waitingOnT2 =
+        targetStatus === GEM_STATUSES.READY_FOR_T2 || targetStatus === GEM_STATUSES.DRAFT_TEST_2
+      if (waitingOnT2) {
+        if (req.body.testerId2) {
+          req.body.currentAssignee = req.body.testerId2
+        } else {
+          req.body.status = GEM_STATUSES.READY_FOR_APPROVAL
+          req.body.currentAssignee = null
+        }
+      }
     }
 
     // Bypassing the testing flow drops the tester assignments and re-routes any
@@ -291,9 +337,8 @@ export const updateTest1 = async (req, res) => {
       return res.status(403).json({ message: "Cannot edit a completed gem" })
     }
 
-    if (req.user.role === ROLES.TESTER && gem.assignedTester1?.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to edit Test 1" })
-    }
+    const denial = describeStageDenial(gem, req.user, "test1")
+    if (denial) return res.status(403).json({ message: denial })
 
     const existing = await GemTest1.findOne({ gemId: gem._id })
     const test1Data = applyTestData(existing?.toObject() || {}, req.body, req.user._id)
@@ -308,9 +353,17 @@ export const updateTest1 = async (req, res) => {
 
     applyGemColourAndWeight(gem, req.body.colour, req.body.weight)
 
-    if (req.body.status === GEM_STATUSES.READY_FOR_T2) {
-      gem.status = GEM_STATUSES.READY_FOR_T2
-      gem.currentAssignee = gem.assignedTester2
+    // Handing Test 1 on. Where it lands is resolved here rather than taken from the
+    // request, because only the assignment says whether a second reading is happening.
+    // Either hand-off status is accepted as "I am done with Test 1"; anything else is a
+    // draft save, and that status is the caller's to set.
+    const handingOn =
+      req.body.status === GEM_STATUSES.READY_FOR_T2 ||
+      req.body.status === GEM_STATUSES.READY_FOR_APPROVAL
+    if (handingOn) {
+      const next = resolveTest1HandOff(gem)
+      gem.status = next.status
+      gem.currentAssignee = next.currentAssignee
     } else if (req.body.status) {
       gem.status = req.body.status
     }
@@ -337,9 +390,8 @@ export const updateTest2 = async (req, res) => {
       return res.status(403).json({ message: "Cannot edit a completed gem" })
     }
 
-    if (req.user.role === ROLES.TESTER && gem.assignedTester2?.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to edit Test 2" })
-    }
+    const denial = describeStageDenial(gem, req.user, "test2")
+    if (denial) return res.status(403).json({ message: denial })
 
     const existing = await GemTest2.findOne({ gemId: gem._id })
     const test2Data = applyTestData(existing?.toObject() || {}, req.body, req.user._id)

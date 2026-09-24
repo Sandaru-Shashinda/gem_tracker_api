@@ -43,6 +43,20 @@ export const buildGemQuery = (queryParams, user) => {
   return query
 }
 
+/**
+ * Where Test 1 hands the stone on to, and who owns it there.
+ *
+ * The second reading only happens when someone is assigned to give it. A gem with no
+ * Tester 2 is read once and goes straight to approval, rather than sitting in a Test 2
+ * queue that nobody owns. The assignment is the only thing consulted, so the answer
+ * cannot drift from what intake actually set up — and the app derives the same answer
+ * the same way in resolveSubmitStatus.
+ */
+export const resolveTest1HandOff = (gem) =>
+  gem.assignedTester2
+    ? { status: GEM_STATUSES.READY_FOR_T2, currentAssignee: gem.assignedTester2 }
+    : { status: GEM_STATUSES.READY_FOR_APPROVAL, currentAssignee: null }
+
 export const populateGemStages = async (gem) => {
   const gemId = gem._id
   // Run all queries in parallel; include a lean gem fetch to access embedded
