@@ -15,7 +15,7 @@ export const getReports = async (req, res) => {
 
     const count = await Report.countDocuments()
     const reports = await Report.find()
-      .populate("gemId", "gemId color weight status reportTypes")
+      .populate("gemId", "gemId color weight status reportTypes reportMode")
       .sort({ createdAt: -1 })
       .limit(pageSize)
       .skip(pageSize * (page - 1))
@@ -164,6 +164,51 @@ export const deleteReport = async (req, res) => {
     res.json({ message: "Report deleted successfully" })
   } catch (error) {
     res.status(500).json({ message: "Error deleting report", error: error.message })
+  }
+}
+
+/**
+ * Which stored document a paper size prints from. A report prints at one size, so only
+ * its own field is ever written or read — a medium report carrying a saved card from
+ * back when it was small keeps it, unread, rather than losing it to a size change.
+ */
+const CUSTOM_CARD_FIELDS = {
+  small: "customCard",
+  medium: "customMediumCard",
+  large: "customLargeCard",
+}
+
+// @desc    Save the custom card a report prints, or clear it
+// @route   PUT /api/reports/:id/custom-card
+// @access  Private/Admin
+//
+// Deliberately not folded into updateReport. That route moves the gem to DONE as a
+// side effect of saving report settings, which is right for the settings and wrong
+// here: rewording a printed certificate says nothing about where the stone is in the
+// workflow, and a lab that customises a card should not find it has advanced the gem.
+//
+// Sending null clears the customisation, and the report goes back to printing the
+// card built from the gem.
+export const updateCustomCard = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id)
+    if (!report) return res.status(404).json({ message: "Report not found" })
+
+    // The size is the caller's, defaulting to the card so requests written before the
+    // A5 existed keep meaning what they meant.
+    const field = CUSTOM_CARD_FIELDS[req.body.reportSize] || CUSTOM_CARD_FIELDS.small
+
+    const { customCard } = req.body
+    const update = customCard ? { $set: { [field]: customCard } } : { $unset: { [field]: 1 } }
+
+    const updatedReport = await Report.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+      runValidators: true,
+    }).populate("signedBy", "name role")
+
+    res.json(updatedReport)
+  } catch (error) {
+    res.status(500).json({ message: "Error saving custom card", error: error.message })
   }
 }
 

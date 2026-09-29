@@ -4,7 +4,7 @@ import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import Image from "../models/Image.js"
 import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
-import { GEM_STATUSES, ROLES } from "../constants/index.js"
+import { GEM_STATUSES, REPORT_MODES, ROLES } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
 
 // Shared field-extraction and null-coercion for test stage updates.
@@ -178,6 +178,7 @@ export const intakeGem = async (req, res) => {
       status,
       imageIds,
       reportTypes,
+      reportMode,
       skipTesting,
     } = req.body
 
@@ -192,6 +193,11 @@ export const intakeGem = async (req, res) => {
 
     const bypassTesting = Boolean(skipTesting)
     const isDraft = status === GEM_STATUSES.DRAFT_INTAKE
+    // A custom certificate has nothing to test or approve: its wording is typed onto
+    // the certificate itself, not derived from readings the lab took. So the gem skips
+    // the whole workflow — no testers, no approval — and goes straight to having a
+    // report somebody can write.
+    const isCustom = reportMode === REPORT_MODES.CUSTOM
 
     if (!isDraft && (!color || !weight)) {
       return res.status(400).json({ message: "Missing required fields: color, weight" })
@@ -200,15 +206,22 @@ export const intakeGem = async (req, res) => {
     // Only the first reading is compulsory. Leaving Tester 2 unassigned is a real
     // choice — the stone gets one reading and goes straight to approval — so it is not
     // treated as a missing field. See the Test 1 hand-off in updateTest1.
-    if (!isDraft && !bypassTesting && !testerId1) {
+    if (!isDraft && !bypassTesting && !isCustom && !testerId1) {
       return res.status(400).json({
         message: "Missing required field: testerId1",
       })
     }
 
-    // Bypassing the testing flow means no testers are assigned and the record
-    // lands directly on the approver's desk.
-    const initialStatus = !isDraft && bypassTesting ? GEM_STATUSES.READY_FOR_APPROVAL : status
+    // Bypassing the testing flow means no testers are assigned and the record lands
+    // directly on the approver's desk. A custom gem goes one further and lands nowhere:
+    // there is no stage left for it to wait in.
+    const initialStatus = isDraft
+      ? status
+      : isCustom
+        ? GEM_STATUSES.DONE
+        : bypassTesting
+          ? GEM_STATUSES.READY_FOR_APPROVAL
+          : status
 
     const gem = new Gem({
       gemId,
@@ -218,11 +231,12 @@ export const intakeGem = async (req, res) => {
       itemDescription,
       images: imageIds || [],
       skipTesting: bypassTesting,
-      assignedTester1: bypassTesting ? null : testerId1 || null,
-      assignedTester2: bypassTesting ? null : testerId2 || null,
-      currentAssignee: bypassTesting ? null : testerId1 || null,
+      assignedTester1: bypassTesting || isCustom ? null : testerId1 || null,
+      assignedTester2: bypassTesting || isCustom ? null : testerId2 || null,
+      currentAssignee: bypassTesting || isCustom ? null : testerId1 || null,
       customerId: customerId || null,
       reportTypes: reportTypes || [],
+      reportMode: reportMode || REPORT_MODES.DEFAULT,
       intake: {
         helperId: req.user._id,
         timestamp: new Date(),
@@ -230,6 +244,15 @@ export const intakeGem = async (req, res) => {
     })
 
     const createdGem = await gem.save()
+
+    // The report is what a custom gem is for, and nothing downstream will raise one for
+    // it — that happens on submission for approval, a step it does not have. Drafts are
+    // left alone: a draft intake is not yet a job.
+    if (isCustom && !isDraft) {
+      createdGem.reportId = await createReportForGem(createdGem._id, createdGem.reportTypes?.[0])
+      await createdGem.save()
+    }
+
     await createdGem.populate("currentAssignee", "name role")
     await createdGem.populate("intake.helperId", "name role")
 
@@ -313,6 +336,18 @@ export const updateGem = async (req, res) => {
         gem[key] = val
       }
     })
+
+    // An intake edited into a custom job gets the same treatment as one taken in as
+    // one: no testers, no stage to wait in, and a report to write against.
+    if (gem.reportMode === REPORT_MODES.CUSTOM && gem.status !== GEM_STATUSES.DRAFT_INTAKE) {
+      gem.assignedTester1 = null
+      gem.assignedTester2 = null
+      gem.currentAssignee = null
+      gem.status = GEM_STATUSES.DONE
+      if (!gem.reportId) {
+        gem.reportId = await createReportForGem(gem._id, gem.reportTypes?.[0])
+      }
+    }
 
     const updatedGem = await gem.save()
     await updatedGem.populate("currentAssignee", "name role")

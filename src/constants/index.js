@@ -23,6 +23,20 @@ export const ROLES = {
   HELPER: "HELPER",
 }
 
+/**
+ * Which kind of certificate a gem was taken in for.
+ *
+ * Decided at intake, because it decides what the rest of the flow is even asking:
+ * a default gem gets one of the lab's standard certificates and is asked which paper
+ * sizes, a custom gem gets a card written for it and is asked none of that. Keeping
+ * the two apart at the point of choice is what stops the configuration page offering
+ * both and leaving somebody to work out which one this stone is actually getting.
+ */
+export const REPORT_MODES = {
+  DEFAULT: "default",
+  CUSTOM: "custom",
+}
+
 export const REPORT_TYPES = {
   SMALL: "small",
   MEDIUM: "medium",

@@ -15,14 +15,24 @@ export const generateReportId = async () => {
   return `REP-${year}-${month}-${sequence}`
 }
 
-export const createReportForGem = async (gemId) => {
+/**
+ * Raises the report a gem's certificate is written against.
+ *
+ * The size is the one the customer asked for at intake. It used to be the card every
+ * time, because the only caller was the approval step and the size was picked
+ * afterwards on the configuration page — a custom gem never reaches that page, so its
+ * report has to be raised at the size it was taken in for.
+ */
+export const createReportForGem = async (gemId, reportType = REPORT_TYPES.SMALL) => {
   const existing = await Report.findOne({ gemId })
   if (existing) return existing._id
+
+  const type = Object.values(REPORT_TYPES).includes(reportType) ? reportType : REPORT_TYPES.SMALL
 
   const reportId = await generateReportId()
   const report = new Report({
     gemId,
-    reportType: REPORT_TYPES.SMALL,
+    reportType: type,
     reportId,
     issuedDate: new Date(),
   })

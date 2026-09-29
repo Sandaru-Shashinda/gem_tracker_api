@@ -5,6 +5,7 @@ import {
   getReportById,
   deleteReport,
   updateReport,
+  updateCustomCard,
 } from "../controllers/reportController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
@@ -13,6 +14,8 @@ const reportRoutes = express.Router()
 reportRoutes.route("/").get(protect, getReports)
 
 reportRoutes.get("/:reportId/verify", verifyReport)
+
+reportRoutes.route("/:id/custom-card").put(protect, authorize("ADMIN"), updateCustomCard)
 
 reportRoutes
   .route("/:id")

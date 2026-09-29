@@ -1,5 +1,5 @@
 import mongoose from "mongoose"
-import { GEM_STATUSES } from "../constants/index.js"
+import { GEM_STATUSES, REPORT_MODES } from "../constants/index.js"
 
 const GemSchema = new mongoose.Schema(
   {
@@ -28,6 +28,13 @@ const GemSchema = new mongoose.Schema(
     assignedTester2: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
     reportTypes: [String],
+    // Standard certificate or a card written for this stone. Defaults to the standard
+    // one, so every gem taken in before the choice existed reads as what it was.
+    reportMode: {
+      type: String,
+      enum: Object.values(REPORT_MODES),
+      default: REPORT_MODES.DEFAULT,
+    },
 
     // When true the gem bypasses Test 1 / Test 2 and goes straight to final approval
     skipTesting: { type: Boolean, default: false },
