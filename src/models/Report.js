@@ -12,9 +12,51 @@ const customCardRowSchema = new mongoose.Schema(
   {
     label: { type: String, default: "", trim: true },
     value: { type: String, default: "", trim: true },
+    // This row's own type size in px; absent, it prints at its block's size.
+    fontSize: { type: Number, min: 4, max: 72 },
   },
   { _id: false },
 )
+
+/**
+ * Type sizes in px per text element, absent where the element prints at its template's
+ * size. One set of keys serves all three sheets; each reads the ones it has.
+ */
+const fontSizeField = { type: Number, min: 4, max: 72 }
+const customFontSizesSchema = new mongoose.Schema(
+  {
+    rows: fontSizeField,
+    comments: fontSizeField,
+    gemName: fontSizeField,
+    weightLine: fontSizeField,
+    heatLine: fontSizeField,
+    imageCaption: fontSizeField,
+    title: fontSizeField,
+    resultsHeading: fontSizeField,
+    termsLine: fontSizeField,
+    reportNumberLine: fontSizeField,
+    dateLine: fontSizeField,
+    headings: fontSizeField,
+    treatments: fontSizeField,
+    specialNote: fontSizeField,
+    statement: fontSizeField,
+  },
+  { _id: false },
+)
+
+/**
+ * Where a custom report departs from its template's geometry rather than its words:
+ * the scanned signature's size and nudge, the gem image's frame and zoom, and the type
+ * sizes. Every default leaves the template exactly as it is. Shared by all three sheets.
+ */
+const customLayoutFields = {
+  signatureScale: { type: Number, default: 1, min: 0.25, max: 4 },
+  signatureX: { type: Number, default: 0, min: -500, max: 500 },
+  signatureY: { type: Number, default: 0, min: -500, max: 500 },
+  imageBoxScale: { type: Number, default: 1, min: 0.25, max: 4 },
+  imageScale: { type: Number, default: 1, min: 0.25, max: 6 },
+  fontSizes: { type: customFontSizesSchema, default: () => ({}) },
+}
 
 /**
  * A one-off rewrite of the small card this report prints.
@@ -43,6 +85,7 @@ const customCardSchema = new mongoose.Schema(
     showGemImage: { type: Boolean, default: true },
     showSignature: { type: Boolean, default: true },
     showQr: { type: Boolean, default: true },
+    ...customLayoutFields,
   },
   { _id: false },
 )
@@ -83,6 +126,7 @@ const customMediumCardSchema = new mongoose.Schema(
     signatoryCompany: { type: String, default: "" },
     showTypedSignature: { type: Boolean, default: true },
     showSignatureImage: { type: Boolean, default: true },
+    ...customLayoutFields,
   },
   { _id: false },
 )
@@ -170,6 +214,7 @@ const customLargeCardSchema = new mongoose.Schema(
 
     termsLine: { type: String, default: "" },
     showWatermark: { type: Boolean, default: true },
+    ...customLayoutFields,
   },
   { _id: false },
 )
