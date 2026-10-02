@@ -10,6 +10,7 @@ export const serializeUser = (user) => ({
   idNumber: user.idNumber,
   address: user.address,
   phoneNumber: user.phoneNumber,
+  profileImage: user.profileImage,
 })
 
 export { generateToken }

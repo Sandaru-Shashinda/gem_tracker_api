@@ -1,6 +1,9 @@
 import User from "../models/User.js"
 import asyncHandler from "../utils/asyncHandler.js"
 import { serializeUser, generateToken } from "../services/auth.service.js"
+import { toProfileImageDataUri } from "../services/image.service.js"
+
+const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
@@ -11,10 +14,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 
   if (user && (await user.matchPassword(password))) {
     res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      ...serializeUser(user),
       token: generateToken(user._id),
     })
   } else {
@@ -27,6 +27,11 @@ export const loginUser = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const registerUser = asyncHandler(async (req, res) => {
   const { password, role, name, age, dob, idNumber, address, email, phoneNumber } = req.body
+
+  if (req.user.role !== "ADMIN" && role === "ADMIN") {
+    res.status(403).json({ message: "Only an admin can create admin accounts" })
+    return
+  }
 
   const userExists = await User.findOne({ email })
 
@@ -61,6 +66,115 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   }
 })
 
+// @desc    Update own profile details (never role or password)
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  const { name, email } = req.body
+
+  if (name !== undefined) {
+    if (!String(name).trim()) {
+      res.status(400).json({ message: "Name is required" })
+      return
+    }
+    user.name = String(name).trim()
+  }
+
+  if (email !== undefined && email !== user.email) {
+    if (!String(email).trim()) {
+      res.status(400).json({ message: "Email is required" })
+      return
+    }
+    const emailExists = await User.findOne({ email, _id: { $ne: user._id } })
+    if (emailExists) {
+      res.status(400).json({ message: "Email already in use" })
+      return
+    }
+    user.email = email
+  }
+
+  // Unlike the admin edit, an empty value here clears the field.
+  for (const field of ["age", "dob", "idNumber", "address", "phoneNumber"]) {
+    if (req.body[field] !== undefined) user[field] = req.body[field] || undefined
+  }
+
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
+
+// @desc    Change own password
+// @route   PUT /api/auth/profile/password
+// @access  Private
+export const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  if (!currentPassword || !(await user.matchPassword(currentPassword))) {
+    res.status(400).json({ message: "Current password is incorrect" })
+    return
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    res.status(400).json({ message: "New password must be at least 6 characters" })
+    return
+  }
+
+  user.password = newPassword
+  await user.save()
+  res.json({ message: "Password updated" })
+})
+
+// @desc    Upload own profile image
+// @route   POST /api/auth/profile/image
+// @access  Private
+export const uploadProfileImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ message: "No image file provided" })
+    return
+  }
+  if (req.file.size > MAX_PROFILE_IMAGE_BYTES) {
+    res.status(400).json({ message: "Image must be 5 MB or smaller" })
+    return
+  }
+
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  user.profileImage = await toProfileImageDataUri(req.file.buffer)
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
+
+// @desc    Remove own profile image
+// @route   DELETE /api/auth/profile/image
+// @access  Private
+export const removeProfileImage = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  user.profileImage = undefined
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
+
 // @desc    Get all users
 // @route   GET /api/auth/users
 // @access  Private/Admin
@@ -80,6 +194,12 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   if (!user) {
     res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  // A helper manages staff accounts but can never touch or create an admin.
+  if (req.user.role !== "ADMIN" && (user.role === "ADMIN" || req.body.role === "ADMIN")) {
+    res.status(403).json({ message: "Only an admin can modify admin accounts" })
     return
   }
 
@@ -111,6 +231,11 @@ export const updateUser = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
+
+  if (user && req.user.role !== "ADMIN" && user.role === "ADMIN") {
+    res.status(403).json({ message: "Only an admin can remove admin accounts" })
+    return
+  }
 
   if (user) {
     user.isDeleted = true

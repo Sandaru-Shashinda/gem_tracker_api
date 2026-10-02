@@ -46,6 +46,27 @@ export const handleImageUpload = async (file, user = null, options = {}) => {
   }
 }
 
+export const MAX_PROFILE_IMAGE_STORED_BYTES = 20 * 1024
+
+// Profile pictures only ever show as small circles, so a square crop kept under 20 KB is
+// plenty and stays cheap to send along with every user record. Quality drops first; only
+// a very detailed photo that still does not fit is shrunk further.
+export const toProfileImageDataUri = async (buffer) => {
+  for (const size of [256, 192, 128, 96]) {
+    for (const quality of [80, 70, 60, 50, 40, 30]) {
+      const compressed = await sharp(buffer)
+        .rotate()
+        .resize(size, size, { fit: "cover" })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer()
+      if (compressed.length <= MAX_PROFILE_IMAGE_STORED_BYTES) {
+        return `data:image/jpeg;base64,${compressed.toString("base64")}`
+      }
+    }
+  }
+  throw new Error("Could not compress the image to 20 KB")
+}
+
 export const handleMultipleImagesUpload = async (files, user = null) => {
   if (!files || files.length === 0) return []
 

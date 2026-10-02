@@ -3,6 +3,8 @@ import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import Image from "../models/Image.js"
+import Customer from "../models/Customer.js"
+import Report from "../models/Report.js"
 import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
 import { GEM_STATUSES, REPORT_MODES, ROLES } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
@@ -100,34 +102,318 @@ export const getGems = async (req, res) => {
   }
 }
 
+// Months on the dashboard are the lab's calendar months, not the server's: the API runs
+// in UTC, and a stone taken in on the morning of the 1st in Colombo would otherwise
+// land in the previous month's bar.
+const LAB_TIME_ZONE = "Asia/Colombo"
+const TOP_SPECIES = 8
+const TOP_CUSTOMERS = 5
+
+// How the activity chart buckets time: the key each bucket is written as, in JS and in
+// the aggregation, so the two always agree.
+const BUCKET_FORMATS = { day: "%Y-%m-%d", month: "%Y-%m", year: "%Y" }
+// Past this many months "all time" reads better a year to a bar.
+const MAX_MONTHLY_BUCKETS = 36
+// Range → how many months back it reaches; "month" is the current month, day by day.
+const ACTIVITY_RANGES = { month: 1, "6m": 6, year: 12, all: null }
+
+const toCounts = (rows) => Object.fromEntries(rows.map((r) => [r._id, r.count]))
+
+const pad2 = (n) => String(n).padStart(2, "0")
+
+/** A date's year, month (0-based) and day on the lab's calendar. */
+function labDate(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: LAB_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value]),
+  )
+  return { year: Number(parts.year), month: Number(parts.month) - 1, day: Number(parts.day) }
+}
+
+/** "YYYY-MM" keys for the `count` lab months ending with the current one, oldest first. */
+function recentMonthKeys(count) {
+  const { year, month } = labDate()
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(Date.UTC(year, month - (count - 1 - i), 1))
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`
+  })
+}
+
+const bucketKey = (field, granularity) => ({
+  $dateToString: { format: BUCKET_FORMATS[granularity], date: field, timezone: LAB_TIME_ZONE },
+})
+
+/** The buckets a range is drawn in, oldest first, every one present even when empty. */
+async function activityBuckets(range) {
+  const today = labDate()
+
+  if (range === "month") {
+    const daysInMonth = new Date(Date.UTC(today.year, today.month + 1, 0)).getUTCDate()
+    const prefix = `${today.year}-${pad2(today.month + 1)}`
+    return {
+      granularity: "day",
+      keys: Array.from({ length: daysInMonth }, (_, i) => `${prefix}-${pad2(i + 1)}`),
+    }
+  }
+
+  let months = ACTIVITY_RANGES[range]
+  if (months === null) {
+    const first = await Gem.findOne().sort({ createdAt: 1 }).select("createdAt").lean()
+    const start = first?.createdAt ? labDate(first.createdAt) : today
+    months = (today.year - start.year) * 12 + (today.month - start.month) + 1
+    if (months > MAX_MONTHLY_BUCKETS) {
+      return {
+        granularity: "year",
+        keys: Array.from({ length: today.year - start.year + 1 }, (_, i) => `${start.year + i}`),
+      }
+    }
+  }
+  return { granularity: "month", keys: recentMonthKeys(months) }
+}
+
+/** What counts as waiting on this user, by the stage their role owns. */
+function actionItemsQuery(user) {
+  switch (user.role) {
+    case ROLES.HELPER:
+      return { status: GEM_STATUSES.TOOK_IN }
+    case ROLES.TESTER:
+      return {
+        currentAssignee: user._id,
+        status: { $in: [GEM_STATUSES.READY_FOR_T1, GEM_STATUSES.READY_FOR_T2] },
+      }
+    case ROLES.ADMIN:
+      return { status: GEM_STATUSES.READY_FOR_APPROVAL }
+    default:
+      return { _id: null }
+  }
+}
+
+// Completed gems joined to their approval record, falling back to the approval still
+// embedded on gems written before stages moved to their own collections, and to their
+// latest report.
+//
+// A custom gem has no approval, so it is complete when its report was issued. Its size
+// is read off that report too: the size can be changed on the report after intake, and
+// the report is the only record of it that follows — the gem's reportTypes keeps
+// whatever intake chose.
+const completedWithApproval = [
+  { $match: { status: GEM_STATUSES.DONE } },
+  {
+    $lookup: {
+      from: GemFinalApproval.collection.name,
+      localField: "_id",
+      foreignField: "gemId",
+      as: "approval",
+    },
+  },
+  {
+    $lookup: {
+      from: Report.collection.name,
+      let: { gem: "$_id" },
+      pipeline: [
+        { $match: { $expr: { $eq: ["$gemId", "$$gem"] } } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 1 },
+        { $project: { reportType: 1, issuedDate: 1 } },
+      ],
+      as: "report",
+    },
+  },
+  {
+    $set: {
+      approval: { $ifNull: [{ $first: "$approval" }, "$finalApproval"] },
+      report: { $first: "$report" },
+    },
+  },
+  {
+    $set: {
+      completedAt: { $ifNull: ["$approval.timestamp", "$report.issuedDate", "$updatedAt"] },
+      species: { $ifNull: ["$approval.finalObservations.species", ""] },
+      reportTypes: {
+        $cond: [
+          {
+            $and: [
+              { $eq: ["$reportMode", REPORT_MODES.CUSTOM] },
+              { $gt: ["$report.reportType", null] },
+            ],
+          },
+          ["$report.reportType"],
+          "$reportTypes",
+        ],
+      },
+    },
+  },
+]
+
 // @desc    Get dashboard statistics
 // @route   GET /api/gems/stats
 // @access  Private
 export const getDashboardStats = async (req, res) => {
   try {
-    const userId = req.user._id
+    const [currentMonth] = recentMonthKeys(1)
+    const completedThisMonth = {
+      $match: { $expr: { $eq: [bucketKey("$completedAt", "month"), currentMonth] } },
+    }
+    // A gem can be taken in for more than one size, and counts once under each.
+    const countReportTypes = [
+      { $unwind: "$reportTypes" },
+      { $group: { _id: "$reportTypes", count: { $sum: 1 } } },
+    ]
 
-    const totalGems = await Gem.countDocuments()
-    const pendingWorkflow = await Gem.countDocuments({ status: { $ne: GEM_STATUSES.DONE } })
-    const completedGems = await Gem.countDocuments({ status: GEM_STATUSES.DONE })
-    const myActionItems = await Gem.countDocuments({ currentAssignee: userId })
+    const [
+      [totals],
+      myActionItems,
+      statusCounts,
+      reportModes,
+      [completed],
+    ] = await Promise.all([
+      Gem.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalGems: { $sum: 1 },
+            completedGems: { $sum: { $cond: [{ $eq: ["$status", GEM_STATUSES.DONE] }, 1, 0] } },
+            totalCarats: { $sum: { $ifNull: ["$weight", 0] } },
+            weighedGems: { $sum: { $cond: [{ $gt: ["$weight", 0] }, 1, 0] } },
+          },
+        },
+      ]),
+      Gem.countDocuments(actionItemsQuery(req.user)),
+      Gem.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Gem.aggregate([
+        { $group: { _id: { $ifNull: ["$reportMode", REPORT_MODES.DEFAULT] }, count: { $sum: 1 } } },
+      ]),
+      Gem.aggregate([
+        ...completedWithApproval,
+        {
+          $facet: {
+            species: [
+              { $group: { _id: "$species", count: { $sum: 1 } } },
+              { $sort: { count: -1, _id: 1 } },
+            ],
+            reportTypes: countReportTypes,
+            reportTypesThisMonth: [completedThisMonth, ...countReportTypes],
+            // Only named species compete for the month's top spot.
+            topSpeciesThisMonth: [
+              completedThisMonth,
+              { $set: { species: { $trim: { input: "$species" } } } },
+              { $match: { species: { $ne: "" } } },
+              { $group: { _id: "$species", count: { $sum: 1 } } },
+              { $sort: { count: -1, _id: 1 } },
+              { $limit: 1 },
+            ],
+            turnaround: [
+              { $match: { completedAt: { $ne: null }, createdAt: { $ne: null } } },
+              {
+                $group: {
+                  _id: null,
+                  avgMs: { $avg: { $subtract: ["$completedAt", "$createdAt"] } },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    ])
 
-    const recentGems = await Gem.find()
-      .populate("currentAssignee", "name role")
-      .sort({ updatedAt: -1 })
-      .limit(5)
-      .lean()
+    const topCustomers = await Gem.aggregate([
+      { $match: { customerId: { $ne: null } } },
+      { $group: { _id: "$customerId", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: TOP_CUSTOMERS },
+      {
+        $lookup: {
+          from: Customer.collection.name,
+          localField: "_id",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      { $set: { customer: { $first: "$customer" } } },
+    ])
+
+    // Unnamed species read as "Unknown"; anything past the top few folds into "Other"
+    // so the chart never needs a colour it doesn't have.
+    const speciesRows = (completed?.species ?? []).map((r) => ({
+      name: r._id?.trim() || "Unknown",
+      count: r.count,
+    }))
+    const species = speciesRows.slice(0, TOP_SPECIES)
+    const otherCount = speciesRows.slice(TOP_SPECIES).reduce((sum, r) => sum + r.count, 0)
+    if (otherCount > 0) species.push({ name: "Other", count: otherCount })
+
+    const avgMs = completed?.turnaround?.[0]?.avgMs
+    const totalGems = totals?.totalGems ?? 0
+    const completedGems = totals?.completedGems ?? 0
+    const [topSpecies] = completed?.topSpeciesThisMonth ?? []
 
     res.json({
       totalGems,
-      pendingWorkflow,
+      pendingWorkflow: totalGems - completedGems,
       completedGems,
       myActionItems,
-      recentGems,
+      reportTypesDone: toCounts(completed?.reportTypes ?? []),
+      reportTypesDoneThisMonth: toCounts(completed?.reportTypesThisMonth ?? []),
+      topSpeciesThisMonth: topSpecies ? { name: topSpecies._id, count: topSpecies.count } : null,
+      totalCarats: totals?.totalCarats ?? 0,
+      averageCarats: totals?.weighedGems ? totals.totalCarats / totals.weighedGems : 0,
+      averageTurnaroundDays: avgMs == null ? null : avgMs / 86_400_000,
+      statusCounts: toCounts(statusCounts),
+      reportModes: toCounts(reportModes),
+      species,
+      topCustomers: topCustomers.map((c) => ({
+        name: c.customer?.companyName || c.customer?.customerName || "Unknown customer",
+        count: c.count,
+      })),
     })
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
     res.status(500).json({ message: "Error fetching dashboard stats", error: error.message })
+  }
+}
+
+// @desc    Gems taken in and completed over time, for the dashboard's activity chart
+// @route   GET /api/gems/stats/activity?range=month|6m|year|all
+// @access  Private
+export const getActivity = async (req, res) => {
+  try {
+    const range = Object.hasOwn(ACTIVITY_RANGES, req.query.range) ? req.query.range : "month"
+    const { granularity, keys } = await activityBuckets(range)
+
+    // A day early, so the first bucket is whole in any time zone; anything before it
+    // lands in a key the response doesn't ask for.
+    const [year, month = 1, day = 1] = keys[0].split("-").map(Number)
+    const start = new Date(Date.UTC(year, month - 1, day - 1))
+    const byBucket = (field) => [
+      { $match: { [field]: { $gte: start } } },
+      { $group: { _id: bucketKey(`$${field}`, granularity), count: { $sum: 1 } } },
+    ]
+
+    const [intakeRows, completedRows] = await Promise.all([
+      Gem.aggregate(byBucket("createdAt")),
+      Gem.aggregate([...completedWithApproval, ...byBucket("completedAt")]),
+    ])
+    const intake = toCounts(intakeRows)
+    const completed = toCounts(completedRows)
+
+    res.json({
+      range,
+      granularity,
+      buckets: keys.map((key) => ({
+        key,
+        intake: intake[key] ?? 0,
+        completed: completed[key] ?? 0,
+      })),
+    })
+  } catch (error) {
+    console.error("Error fetching activity:", error)
+    res.status(500).json({ message: "Error fetching activity", error: error.message })
   }
 }
 

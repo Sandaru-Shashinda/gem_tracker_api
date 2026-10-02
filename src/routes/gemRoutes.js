@@ -2,6 +2,7 @@ import express from "express"
 import {
   getGems,
   getDashboardStats,
+  getActivity,
   getGemById,
   getLastGrc,
   intakeGem,
@@ -21,6 +22,7 @@ const gemRoutes = express.Router()
 
 gemRoutes.route("/").get(protect, getGems)
 gemRoutes.get("/stats", protect, getDashboardStats)
+gemRoutes.get("/stats/activity", protect, getActivity)
 gemRoutes.get("/last-grc", protect, getLastGrc)
 
 gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), intakeGem)

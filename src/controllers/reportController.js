@@ -2,19 +2,57 @@ import Report from "../models/Report.js"
 import Gem from "../models/Gem.js"
 import Image from "../models/Image.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
-import { GEM_STATUSES } from "../constants/index.js"
+import { GEM_STATUSES, REPORT_MODES, REPORT_TYPES } from "../constants/index.js"
 import { populateGemStages } from "../services/gem.service.js"
 
+/**
+ * The report list's filters, as a Report query.
+ *
+ * Status and certificate type live on the gem, so they narrow the reports to those of
+ * the matching gems. `from`/`to` are instants, not dates: the app turns the day the
+ * user picked into its own local midnight, so the filter agrees with the issued date
+ * the table shows. `to` is exclusive.
+ */
+async function buildReportQuery({ search, status, type, mode, from, to }) {
+  const query = {}
+
+  if (type && Object.values(REPORT_TYPES).includes(type)) query.reportType = type
+
+  const fromDate = from ? new Date(from) : null
+  const toDate = to ? new Date(to) : null
+  if (fromDate && !isNaN(fromDate)) query.issuedDate = { ...query.issuedDate, $gte: fromDate }
+  if (toDate && !isNaN(toDate)) query.issuedDate = { ...query.issuedDate, $lt: toDate }
+
+  const gemFilter = {}
+  if (status && Object.values(GEM_STATUSES).includes(status)) gemFilter.status = status
+  if (mode === REPORT_MODES.CUSTOM) gemFilter.reportMode = REPORT_MODES.CUSTOM
+  // Gems taken in before the choice existed carry no mode, and are standard.
+  if (mode === REPORT_MODES.DEFAULT) gemFilter.reportMode = { $ne: REPORT_MODES.CUSTOM }
+  if (Object.keys(gemFilter).length) {
+    query.gemId = { $in: await Gem.distinct("_id", gemFilter) }
+  }
+
+  const term = typeof search === "string" ? search.trim() : ""
+  if (term) {
+    const pattern = { $regex: term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" }
+    const matchingGems = await Gem.distinct("_id", { gemId: pattern })
+    query.$or = [{ reportId: pattern }, { gemId: { $in: matchingGems } }]
+  }
+
+  return query
+}
+
 // @desc    Get all reports
-// @route   GET /api/reports
+// @route   GET /api/reports?search=&status=&type=&mode=&from=&to=
 // @access  Private
 export const getReports = async (req, res) => {
   try {
     const pageSize = Number(req.query.limit) || 10
     const page = Number(req.query.page) || 1
 
-    const count = await Report.countDocuments()
-    const reports = await Report.find()
+    const query = await buildReportQuery(req.query)
+    const count = await Report.countDocuments(query)
+    const reports = await Report.find(query)
       .populate("gemId", "gemId color weight status reportTypes reportMode")
       .sort({ createdAt: -1 })
       .limit(pageSize)

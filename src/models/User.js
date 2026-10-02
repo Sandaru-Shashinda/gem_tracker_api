@@ -16,6 +16,8 @@ const UserSchema = new mongoose.Schema(
     address: { type: Schema.Types.Mixed, required: false },
     email: { type: String, required: true },
     phoneNumber: { type: String, required: false },
+    // Small square JPEG as a data URI, set by the user from their own profile page.
+    profileImage: { type: String, required: false },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true },
