@@ -231,7 +231,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 
   // Signatures stay out of user lists — every list of testers would otherwise carry
   // tens of kilobytes of image per person for no screen that shows them.
-  const users = await User.find(filter).select("-signatureImage")
+  const users = await User.find(filter).select("-password -signatureImage")
   res.json(users)
 })
 

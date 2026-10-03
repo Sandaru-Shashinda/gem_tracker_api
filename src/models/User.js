@@ -24,7 +24,16 @@ const UserSchema = new mongoose.Schema(
     signatureImage: { type: String, required: false },
     isDeleted: { type: Boolean, default: false },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    // The hash never leaves the server, even when a query forgets to deselect it.
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.password
+        return ret
+      },
+    },
+  },
 )
 
 // Method to check password
