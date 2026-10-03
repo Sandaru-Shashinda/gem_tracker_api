@@ -1,7 +1,7 @@
 import User from "../models/User.js"
 import asyncHandler from "../utils/asyncHandler.js"
 import { serializeUser, generateToken } from "../services/auth.service.js"
-import { toProfileImageDataUri } from "../services/image.service.js"
+import { toProfileImageDataUri, toSignatureDataUri } from "../services/image.service.js"
 
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -175,6 +175,53 @@ export const removeProfileImage = asyncHandler(async (req, res) => {
   res.json(serializeUser(updatedUser))
 })
 
+// @desc    Upload own signature
+// @route   POST /api/auth/profile/signature
+// @access  Private
+//
+// Only ever one's own: a signature is printed on certificates under the signer's name,
+// so nobody sets it on another person's behalf.
+export const uploadSignatureImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ message: "No image file provided" })
+    return
+  }
+  if (req.file.size > MAX_PROFILE_IMAGE_BYTES) {
+    res.status(400).json({ message: "Image must be 5 MB or smaller" })
+    return
+  }
+
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  try {
+    user.signatureImage = await toSignatureDataUri(req.file.buffer)
+  } catch (error) {
+    res.status(400).json({ message: error.message })
+    return
+  }
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
+
+// @desc    Remove own signature
+// @route   DELETE /api/auth/profile/signature
+// @access  Private
+export const removeSignatureImage = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.user._id, isDeleted: { $ne: true } })
+  if (!user) {
+    res.status(404).json({ message: "User not found" })
+    return
+  }
+
+  user.signatureImage = undefined
+  const updatedUser = await user.save()
+  res.json(serializeUser(updatedUser))
+})
+
 // @desc    Get all users
 // @route   GET /api/auth/users
 // @access  Private/Admin
@@ -182,7 +229,9 @@ export const getUsers = asyncHandler(async (req, res) => {
   const filter = { isDeleted: { $ne: true } }
   if (req.query.role) filter.role = req.query.role
 
-  const users = await User.find(filter)
+  // Signatures stay out of user lists — every list of testers would otherwise carry
+  // tens of kilobytes of image per person for no screen that shows them.
+  const users = await User.find(filter).select("-signatureImage")
   res.json(users)
 })
 

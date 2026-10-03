@@ -10,6 +10,8 @@ import {
   changePassword,
   uploadProfileImage,
   removeProfileImage,
+  uploadSignatureImage,
+  removeSignatureImage,
 } from "../controllers/authController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 import upload from "../middleware/uploadMiddleware.js"
@@ -27,5 +29,7 @@ authRoutes.put("/profile", protect, updateUserProfile)
 authRoutes.put("/profile/password", protect, changePassword)
 authRoutes.post("/profile/image", protect, upload.single("image"), uploadProfileImage)
 authRoutes.delete("/profile/image", protect, removeProfileImage)
+authRoutes.post("/profile/signature", protect, upload.single("image"), uploadSignatureImage)
+authRoutes.delete("/profile/signature", protect, removeSignatureImage)
 
 export default authRoutes

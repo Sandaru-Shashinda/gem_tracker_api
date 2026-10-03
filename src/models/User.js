@@ -18,6 +18,10 @@ const UserSchema = new mongoose.Schema(
     phoneNumber: { type: String, required: false },
     // Small square JPEG as a data URI, set by the user from their own profile page.
     profileImage: { type: String, required: false },
+    // The user's handwritten signature as a transparent PNG data URI, set from their own
+    // profile page. Printed on the digital copy of a report they are the signatory of —
+    // the copy a QR scan opens — where the paper copy carries their signature in ink.
+    signatureImage: { type: String, required: false },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true },

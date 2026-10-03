@@ -74,9 +74,11 @@ export const getReports = async (req, res) => {
 // @access  Public
 export const getReportById = async (req, res) => {
   try {
+    // The signatory's signature comes along so the digital copy can carry it where the
+    // paper copy carries it in ink.
     const report = await Report.findById(req.params.id)
       .populate("gemId")
-      .populate("signedBy", "name role")
+      .populate("signedBy", "name role signatureImage")
     if (!report) return res.status(404).json({ message: "Report not found" })
 
     const gem = report.gemId.toObject()
