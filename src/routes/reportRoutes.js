@@ -6,6 +6,7 @@ import {
   deleteReport,
   updateReport,
   updateCustomCard,
+  updateReportVideo,
 } from "../controllers/reportController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
@@ -16,6 +17,8 @@ reportRoutes.route("/").get(protect, getReports)
 reportRoutes.get("/:reportId/verify", verifyReport)
 
 reportRoutes.route("/:id/custom-card").put(protect, authorize("ADMIN"), updateCustomCard)
+
+reportRoutes.route("/:id/video").put(protect, authorize("ADMIN"), updateReportVideo)
 
 reportRoutes
   .route("/:id")

@@ -38,6 +38,9 @@ const GemSchema = new mongoose.Schema(
 
     // When true the gem bypasses Test 1 / Test 2 and goes straight to final approval
     skipTesting: { type: Boolean, default: false },
+    // The customer asked for a video of the stone to be reachable from the certificate's
+    // QR code. Only the request lives here — the link itself is the report's videoUrl.
+    videoPreview: { type: Boolean, default: false },
     // Intake specific
     intake: {
       helperId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

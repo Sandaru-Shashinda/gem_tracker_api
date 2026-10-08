@@ -53,7 +53,7 @@ export const getReports = async (req, res) => {
     const query = await buildReportQuery(req.query)
     const count = await Report.countDocuments(query)
     const reports = await Report.find(query)
-      .populate("gemId", "gemId color weight status reportTypes reportMode")
+      .populate("gemId", "gemId color weight status reportTypes reportMode videoPreview")
       .sort({ createdAt: -1 })
       .limit(pageSize)
       .skip(pageSize * (page - 1))
@@ -249,6 +249,44 @@ export const updateCustomCard = async (req, res) => {
     res.json(updatedReport)
   } catch (error) {
     res.status(500).json({ message: "Error saving custom card", error: error.message })
+  }
+}
+
+// @desc    Save the video link a report's QR page offers, or clear it
+// @route   PUT /api/reports/:id/video
+// @access  Private/Admin
+//
+// Its own route for the same reason the custom card has one: updateReport moves the gem
+// to DONE, and pasting a link says nothing about where the stone is in the workflow.
+//
+// The link is printed as-is on a public page, so only http(s) is let through. An empty
+// value clears it.
+export const updateReportVideo = async (req, res) => {
+  try {
+    const videoUrl = typeof req.body.videoUrl === "string" ? req.body.videoUrl.trim() : ""
+
+    if (videoUrl) {
+      let parsed = null
+      try {
+        parsed = new URL(videoUrl)
+      } catch {
+        // Falls through to the rejection below.
+      }
+      if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
+        return res.status(400).json({ message: "Video link must be a valid http(s) URL" })
+      }
+    }
+
+    const update = videoUrl ? { $set: { videoUrl } } : { $unset: { videoUrl: 1 } }
+    const updatedReport = await Report.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+      runValidators: true,
+    }).populate("signedBy", "name role")
+    if (!updatedReport) return res.status(404).json({ message: "Report not found" })
+
+    res.json(updatedReport)
+  } catch (error) {
+    res.status(500).json({ message: "Error saving video link", error: error.message })
   }
 }
 

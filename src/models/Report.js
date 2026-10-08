@@ -251,6 +251,12 @@ const reportSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Link to a video of the stone (a Google Drive share link). When set, the page a QR
+    // scan opens offers to play it. Absent means no video, whatever intake asked for.
+    videoUrl: {
+      type: String,
+      trim: true,
+    },
     // The consultant gemologist whose name is printed on the left-hand signature
     // field of the medium and large reports. Held as a reference so the printed
     // name tracks the user record instead of a copy of it.

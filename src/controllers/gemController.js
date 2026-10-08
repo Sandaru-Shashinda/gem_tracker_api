@@ -466,6 +466,7 @@ export const intakeGem = async (req, res) => {
       reportTypes,
       reportMode,
       skipTesting,
+      videoPreview,
     } = req.body
 
     if (!gemId) {
@@ -517,6 +518,7 @@ export const intakeGem = async (req, res) => {
       itemDescription,
       images: imageIds || [],
       skipTesting: bypassTesting,
+      videoPreview: Boolean(videoPreview),
       assignedTester1: bypassTesting || isCustom ? null : testerId1 || null,
       assignedTester2: bypassTesting || isCustom ? null : testerId2 || null,
       currentAssignee: bypassTesting || isCustom ? null : testerId1 || null,
