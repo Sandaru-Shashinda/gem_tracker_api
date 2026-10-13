@@ -1,4 +1,5 @@
 import GemReference from "../models/GemReference.js"
+import Gem from "../models/Gem.js"
 import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
@@ -145,7 +146,9 @@ const mergeNames = (...lists) => {
 // @desc    Every species and variety the lab has on file: the published reference table
 //          plus every name actually recorded on a gem. Both identification fields take
 //          free text — a stone the table does not cover still has to be named — so what
-//          one tester types is history the next tester should be offered.
+//          one tester types is history the next tester should be offered. The other
+//          free-text fields (the four written notes, colour, shape and the two cutting
+//          styles) ride along as `history`.
 // @route   GET /api/references/identifications
 // @access  Private
 export const getIdentifications = async (req, res) => {
@@ -176,7 +179,53 @@ export const getIdentifications = async (req, res) => {
       GemFinalApproval.distinct("finalVariety"),
     ])
 
+    // The other free-text fields are offered back the same way: whatever has been saved
+    // on a gem is the history, so there is no separate list to keep in step with it.
+    const observed = async (field) =>
+      mergeNames(
+        ...(await Promise.all([
+          GemTest1.distinct(`observations.${field}`),
+          GemTest2.distinct(`observations.${field}`),
+          GemFinalApproval.distinct(`finalObservations.${field}`),
+        ])),
+      )
+    const [
+      intakeDescriptions,
+      itemDescription,
+      comments,
+      specialNote,
+      treatment,
+      cuttingShape,
+      crownStyle,
+      pavilionStyle,
+      ...colours
+    ] = await Promise.all([
+      Gem.distinct("itemDescription"),
+      observed("itemDescription"),
+      observed("comments"),
+      observed("specialNote"),
+      observed("treatment"),
+      observed("cuttingShape"),
+      observed("crownStyle"),
+      observed("pavilionStyle"),
+      // Colour sits on the stage record itself, and on the gem from intake.
+      Gem.distinct("color"),
+      GemTest1.distinct("colour"),
+      GemTest2.distinct("colour"),
+      GemFinalApproval.distinct("colour"),
+    ])
+
     res.json({
+      history: {
+        itemDescription: mergeNames(intakeDescriptions, itemDescription),
+        comments,
+        specialNote,
+        treatment,
+        colour: mergeNames(...colours),
+        cuttingShape,
+        crownStyle,
+        pavilionStyle,
+      },
       species: mergeNames(refSpecies, t1Species, t2Species, approvalSpecies),
       varieties: mergeNames(
         refVarieties,

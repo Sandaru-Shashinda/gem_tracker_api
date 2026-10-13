@@ -116,6 +116,16 @@ const exactInsensitive = (value) => ({
   $options: "i",
 })
 
+/**
+ * Matches any id whose digits, read in order, are exactly those of `value` —
+ * letters, dashes and spaces on either side are ignored. Null when `value` holds
+ * no digits, since that would match every id.
+ */
+const digitsOnly = (value) => {
+  const digits = value.replace(/\D/g, "")
+  return digits ? { $regex: `^\\D*${digits.split("").join("\\D*")}\\D*$` } : null
+}
+
 // @desc    Verify/View digital report data
 // @route   GET /api/reports/:reportId/verify
 // @access  Public
@@ -145,6 +155,19 @@ export const verifyReport = async (req, res) => {
       if (gem) {
         report = await Report.findOne({ gemId: gem._id }).sort({ createdAt: -1 })
       }
+    }
+
+    // A GRC number is a letter prefix on a number (SA32389, LA942034), and the
+    // prefix is the part customers drop, mistype or swap. So when the number as
+    // typed matches nothing, compare the digits alone and ignore everything else.
+    const digitsPattern = digitsOnly(identifier)
+    if ((!report || !gem) && digitsPattern) {
+      const candidates = await Gem.distinct("_id", { gemId: digitsPattern })
+      // Two prefixes can share a number; the most recently issued report wins.
+      report = await Report.findOne({ gemId: { $in: candidates } }).sort({ createdAt: -1 })
+      gem = report
+        ? await Gem.findById(report.gemId).populate("intake.helperId", "name")
+        : null
     }
 
     if (!report || !gem) {
