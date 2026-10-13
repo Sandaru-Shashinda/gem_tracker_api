@@ -46,7 +46,7 @@ const customFontSizesSchema = new mongoose.Schema(
 
 /**
  * Where a custom report departs from its template's geometry rather than its words:
- * the scanned signature's size and nudge, the gem image's frame and zoom, and the type
+ * the scanned signature's size and nudge, the gem image's frame, zoom and drop shadow, and the type
  * sizes. Every default leaves the template exactly as it is. Shared by all three sheets.
  */
 const customLayoutFields = {
@@ -55,6 +55,8 @@ const customLayoutFields = {
   signatureY: { type: Number, default: 0, min: -500, max: 500 },
   imageBoxScale: { type: Number, default: 1, min: 0.25, max: 4 },
   imageScale: { type: Number, default: 1, min: 0.25, max: 6 },
+  shadowWidthScale: { type: Number, default: 1, min: 0, max: 4 },
+  shadowHeightScale: { type: Number, default: 1, min: 0, max: 4 },
   fontSizes: { type: customFontSizesSchema, default: () => ({}) },
 }
 
