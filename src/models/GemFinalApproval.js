@@ -19,7 +19,7 @@ const finalObservationsSchema = {
   proportionGrade: String,
   clarityGrade: String,
   clarityEnhancement: String,
-  // Colour breakdown printed in the large report. Tone and saturation are graded
+  // Colour breakdown printed in the premium report. Tone and saturation are graded
   // Low | Medium | High.
   hue: String,
   tone: String,
@@ -28,7 +28,7 @@ const finalObservationsSchema = {
   itemDescription: String,
   specialNote: String,
   treatment: String,
-  // Per-treatment checklist printed on the large report. Each value is "Yes" | "No"
+  // Per-treatment checklist printed on the premium report. Each value is "Yes" | "No"
   // or "" / absent when the lab has not assessed it — a deliberate tri-state, since
   // "not tested" and "tested, not present" are different claims on a certificate.
   // Keys and their section grouping are mirrored in the app's lib/treatments.ts.

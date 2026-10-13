@@ -211,11 +211,15 @@ export const deleteReport = async (req, res) => {
  * Which stored document a paper size prints from. A report prints at one size, so only
  * its own field is ever written or read — a medium report carrying a saved card from
  * back when it was small keeps it, unread, rather than losing it to a size change.
+ *
+ * The premium sheet's field keeps the name it had when that sheet was called the large
+ * report; the large report that took the name since has its own.
  */
 const CUSTOM_CARD_FIELDS = {
   small: "customCard",
   medium: "customMediumCard",
-  large: "customLargeCard",
+  large: "customStandardLargeCard",
+  premium: "customLargeCard",
 }
 
 // @desc    Save the custom card a report prints, or clear it

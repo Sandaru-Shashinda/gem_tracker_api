@@ -41,6 +41,7 @@ export const REPORT_TYPES = {
   SMALL: "small",
   MEDIUM: "medium",
   LARGE: "large",
+  PREMIUM: "premium",
   VERBAL: "verbal",
 }
 

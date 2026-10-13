@@ -219,6 +219,59 @@ const customLargeCardSchema = new mongoose.Schema(
   { _id: false },
 )
 
+/**
+ * A one-off rewrite of the standard large A4 this report prints.
+ *
+ * The large report is the premium sheet pared back — no colour breakdown, and the
+ * treatment finding written as a sentence rather than answered on a checklist — so its
+ * document is free text throughout, bar the clarity grade that is marked.
+ */
+const customStandardLargeCardSchema = new mongoose.Schema(
+  {
+    title: { type: String, default: "" },
+    reportNumberLine: { type: String, default: "" },
+    dateLine: { type: String, default: "" },
+    showLogo: { type: Boolean, default: true },
+    showQr: { type: Boolean, default: true },
+    qrValue: { type: String, default: "" },
+
+    detailsHeading: { type: String, default: "DETAILS" },
+    detailRows: { type: [customCardRowSchema], default: [] },
+    cutRows: { type: [customCardRowSchema], default: [] },
+
+    resultsHeading: { type: String, default: "RESULTS" },
+    resultRows: { type: [customCardRowSchema], default: [] },
+    treatmentHeading: { type: String, default: "TREATMENT" },
+    treatment: { type: String, default: "" },
+    specialNoteHeading: { type: String, default: "SPECIAL NOTE" },
+    specialNote: { type: String, default: "" },
+    showSpecialNote: { type: Boolean, default: false },
+
+    clarityHeading: { type: String, default: "Clarity Chart" },
+    clarityGrade: { type: String, default: "" },
+    showClarityChart: { type: Boolean, default: true },
+    statement: { type: String, default: "" },
+    showStatement: { type: Boolean, default: true },
+
+    showGemImage: { type: Boolean, default: true },
+    imageCaption: { type: String, default: "" },
+    heatLine: { type: String, default: "" },
+    showHeatLine: { type: Boolean, default: false },
+    gemName: { type: String, default: "" },
+    weightLine: { type: String, default: "" },
+    signatoryName: { type: String, default: "" },
+    signatoryRole: { type: String, default: "" },
+    signatoryCompany: { type: String, default: "" },
+    showTypedSignature: { type: Boolean, default: true },
+    showSignatureImage: { type: Boolean, default: true },
+
+    termsLine: { type: String, default: "" },
+    showWatermark: { type: Boolean, default: true },
+    ...customLayoutFields,
+  },
+  { _id: false },
+)
+
 const reportSchema = new mongoose.Schema(
   {
     gemId: {
@@ -258,7 +311,7 @@ const reportSchema = new mongoose.Schema(
       trim: true,
     },
     // The consultant gemologist whose name is printed on the left-hand signature
-    // field of the medium and large reports. Held as a reference so the printed
+    // field of the medium, large and premium reports. Held as a reference so the printed
     // name tracks the user record instead of a copy of it.
     signedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -276,9 +329,15 @@ const reportSchema = new mongoose.Schema(
       type: customMediumCardSchema,
       default: undefined,
     },
-    // And the A4. Read only by a large report.
+    // And the premium A4. Read only by a premium report; the field keeps the name it
+    // had when that sheet was called the large report.
     customLargeCard: {
       type: customLargeCardSchema,
+      default: undefined,
+    },
+    // The standard large A4. Read only by a large report.
+    customStandardLargeCard: {
+      type: customStandardLargeCardSchema,
       default: undefined,
     },
   },
