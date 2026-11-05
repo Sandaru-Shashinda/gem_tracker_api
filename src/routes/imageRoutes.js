@@ -13,10 +13,11 @@ const imageRoutes = express.Router()
 
 imageRoutes.route("/").get(protect, getImages).post(protect, upload.single("image"), uploadImage)
 
+// Deleting an image also pulls it off its gem, and so off that gem's report.
 imageRoutes
   .route("/:id")
   .get(getImageById)
-  .put(protect, updateImage)
-  .delete(protect, deleteImage)
+  .put(protect, authorize("ADMIN", "HELPER"), updateImage)
+  .delete(protect, authorize("ADMIN", "HELPER"), deleteImage)
 
 export default imageRoutes

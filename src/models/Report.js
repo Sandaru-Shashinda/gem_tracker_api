@@ -112,6 +112,9 @@ const customMediumCardSchema = new mongoose.Schema(
     commentsLabel: { type: String, default: "Comments" },
     comments: { type: String, default: "" },
     clarityGrade: { type: String, default: "" },
+    // No defaults: a card saved before the emerald scales existed reads these off the gem.
+    emeraldClarity: Boolean,
+    clarityEnhancement: String,
     showClarityTable: { type: Boolean, default: true },
     qrValue: { type: String, default: "" },
     showQr: { type: Boolean, default: true },
@@ -197,6 +200,9 @@ const customLargeCardSchema = new mongoose.Schema(
 
     clarityHeading: { type: String, default: "CLARITY CHART" },
     clarityGrade: { type: String, default: "" },
+    // No defaults: a card saved before the emerald scales existed reads these off the gem.
+    emeraldClarity: Boolean,
+    clarityEnhancement: String,
     showClarityChart: { type: Boolean, default: true },
     statementHeading: { type: String, default: "STATEMENT" },
     statement: { type: String, default: "" },
@@ -251,6 +257,9 @@ const customStandardLargeCardSchema = new mongoose.Schema(
 
     clarityHeading: { type: String, default: "Clarity Chart" },
     clarityGrade: { type: String, default: "" },
+    // No defaults: a card saved before the emerald scales existed reads these off the gem.
+    emeraldClarity: Boolean,
+    clarityEnhancement: String,
     showClarityChart: { type: Boolean, default: true },
     statement: { type: String, default: "" },
     showStatement: { type: Boolean, default: true },

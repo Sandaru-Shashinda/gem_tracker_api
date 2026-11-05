@@ -553,7 +553,7 @@ export const intakeGem = async (req, res) => {
 
 // @desc    Update gem basic info or image
 // @route   PUT /api/gems/:id
-// @access  Private
+// @access  Private/Admin/Helper
 export const updateGem = async (req, res) => {
   try {
     const gem = await Gem.findById(req.params.id)
@@ -944,7 +944,7 @@ export const dismissApproverCorrection = async (req, res) => {
 
 // @desc    Add images to an existing gem
 // @route   POST /api/gems/:id/images
-// @access  Private
+// @access  Private/Admin/Helper
 export const addGemImages = async (req, res) => {
   try {
     const gem = await Gem.findById(req.params.id)

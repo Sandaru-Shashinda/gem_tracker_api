@@ -27,16 +27,18 @@ gemRoutes.get("/last-grc", protect, getLastGrc)
 
 gemRoutes.post("/intake", protect, authorize("HELPER", "ADMIN"), intakeGem)
 
+// A report prints the gem's own record, so these writes are closed to TESTER: a tester
+// reads reports, and records readings only through the stage routes below.
 gemRoutes
   .route("/:id")
   .get(protect, getGemById)
-  .put(protect, authorize("ADMIN", "HELPER", "TESTER"), updateGem)
+  .put(protect, authorize("ADMIN", "HELPER"), updateGem)
   .delete(protect, authorize("ADMIN"), deleteGem)
 
 gemRoutes.put("/:id/test1", protect, authorize("TESTER", "ADMIN"), updateTest1)
 gemRoutes.put("/:id/test2", protect, authorize("TESTER", "ADMIN"), updateTest2)
 gemRoutes.put("/:id/final-approval", protect, authorize("ADMIN"), updateFinalApproval)
-gemRoutes.post("/:id/images", protect, addGemImages)
+gemRoutes.post("/:id/images", protect, authorize("ADMIN", "HELPER"), addGemImages)
 gemRoutes.put("/:id/request-correction", protect, authorize("ADMIN"), requestCorrection)
 gemRoutes.put("/:id/request-approver-correction", protect, authorize("ADMIN"), requestApproverCorrection)
 gemRoutes.put("/:id/dismiss-approver-correction", protect, authorize("ADMIN"), dismissApproverCorrection)

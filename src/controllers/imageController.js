@@ -71,7 +71,7 @@ export const getImageById = async (req, res) => {
 
 // @desc    Update image
 // @route   PUT /api/images/:id
-// @access  Private
+// @access  Private/Admin/Helper
 export const updateImage = async (req, res) => {
   try {
     const { category, description, tags, name, metadata } = req.body
@@ -102,7 +102,7 @@ export const updateImage = async (req, res) => {
 
 // @desc    Delete image
 // @route   DELETE /api/images/:id
-// @access  Private
+// @access  Private/Admin/Helper
 export const deleteImage = async (req, res) => {
   try {
     const image = await Image.findById(req.params.id)

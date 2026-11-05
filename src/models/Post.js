@@ -4,8 +4,8 @@ import { POST_CATEGORIES, POST_STATUSES } from "../constants/index.js"
 /**
  * An article published to the Post section of grc.lk.
  *
- * Authored by laboratory staff: any signed-in user may write a blog, only an
- * ADMIN may file under GRC News, and only an ADMIN can move a post to PUBLISHED.
+ * Authored by laboratory staff: any signed-in user may write a blog, an ADMIN or
+ * TESTER may file under GRC News, and only an ADMIN can move a post to PUBLISHED.
  * Until then nothing here is reachable from the public site — the public routes
  * filter on `status` rather than trusting the caller.
  */

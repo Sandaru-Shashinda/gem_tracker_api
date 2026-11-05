@@ -11,6 +11,15 @@ const asText = (value) => (typeof value === "string" ? value.trim() : "")
 const isAdmin = (user) => user?.role === ROLES.ADMIN
 const isValid = (map, value) => Object.values(map).includes(value)
 
+/**
+ * Anyone may write a blog. A TESTER may also draft GRC News, which is safe to allow
+ * because a draft stays off grc.lk until an ADMIN publishes it.
+ */
+const canFileUnder = (user, category) =>
+  isAdmin(user) ||
+  category === POST_CATEGORIES.BLOG ||
+  (user?.role === ROLES.TESTER && category === POST_CATEGORIES.GRC_NEWS)
+
 /** The author's own drafts are theirs to edit; everything else needs ADMIN. */
 const canEdit = (post, user) =>
   isAdmin(user) ||
@@ -98,10 +107,8 @@ export const createPost = async (req, res) => {
       return res.status(400).json({ message: "Please complete the post.", errors })
     }
 
-    // Only an ADMIN may file under GRC News; everyone else writes blog posts.
     let category = asText(req.body.category)
-    if (!isValid(POST_CATEGORIES, category)) category = POST_CATEGORIES.BLOG
-    if (!isAdmin(req.user) && category !== POST_CATEGORIES.BLOG) {
+    if (!isValid(POST_CATEGORIES, category) || !canFileUnder(req.user, category)) {
       category = POST_CATEGORIES.BLOG
     }
 
@@ -179,10 +186,8 @@ export const updatePost = async (req, res) => {
 
     if (req.body.category !== undefined) {
       const category = asText(req.body.category)
-      if (isValid(POST_CATEGORIES, category)) {
-        if (isAdmin(req.user) || category === POST_CATEGORIES.BLOG) {
-          post.category = category
-        }
+      if (isValid(POST_CATEGORIES, category) && canFileUnder(req.user, category)) {
+        post.category = category
       }
     }
 
