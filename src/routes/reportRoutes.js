@@ -7,6 +7,7 @@ import {
   updateReport,
   updateCustomCard,
   updateReportVideo,
+  streamReportVideo,
 } from "../controllers/reportController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
@@ -19,6 +20,9 @@ reportRoutes.get("/:reportId/verify", verifyReport)
 reportRoutes.route("/:id/custom-card").put(protect, authorize("ADMIN"), updateCustomCard)
 
 reportRoutes.route("/:id/video").put(protect, authorize("ADMIN"), updateReportVideo)
+
+// Public, like GET /:id: the QR page's video player loads the file from here.
+reportRoutes.get("/:id/video/stream", streamReportVideo)
 
 reportRoutes
   .route("/:id")
