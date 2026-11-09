@@ -41,6 +41,9 @@ const GemSchema = new mongoose.Schema(
     // The customer asked for a video of the stone to be reachable from the certificate's
     // QR code. Only the request lives here — the link itself is the report's videoUrl.
     videoPreview: { type: Boolean, default: false },
+    // The gem's folder in the lab's Shared Drive, holding its photos and videos. Created
+    // the first time something is uploaded, so absent means nothing has been.
+    driveFolderId: String,
     // Intake specific
     intake: {
       helperId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

@@ -8,6 +8,7 @@ import Report from "../models/Report.js"
 import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
 import { GEM_STATUSES, REPORT_MODES, ROLES } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
+import { isDriveConfigured, trashFile } from "../services/drive.service.js"
 
 // Shared field-extraction and null-coercion for test stage updates.
 // Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
@@ -835,6 +836,14 @@ export const deleteGem = async (req, res) => {
       GemTest2.deleteOne({ gemId: gem._id }),
       GemFinalApproval.deleteOne({ gemId: gem._id }),
     ])
+
+    // Into Drive's trash, where it can still be restored for 30 days. A Drive outage
+    // should not keep a gem from being deleted, so a failure is only logged.
+    if (gem.driveFolderId && isDriveConfigured()) {
+      await trashFile(gem.driveFolderId).catch((error) =>
+        console.error("Could not trash the deleted gem's Drive folder:", error),
+      )
+    }
 
     await gem.deleteOne()
     res.json({ message: "Gem deleted successfully" })

@@ -16,6 +16,13 @@ import {
   updateTest2,
   updateFinalApproval,
 } from "../controllers/gemController.js"
+import {
+  listGemMedia,
+  createGemUpload,
+  getGemMediaThumbnail,
+  streamGemMedia,
+  deleteGemMedia,
+} from "../controllers/mediaController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
 const gemRoutes = express.Router()
@@ -42,5 +49,15 @@ gemRoutes.post("/:id/images", protect, authorize("ADMIN", "HELPER"), addGemImage
 gemRoutes.put("/:id/request-correction", protect, authorize("ADMIN"), requestCorrection)
 gemRoutes.put("/:id/request-approver-correction", protect, authorize("ADMIN"), requestApproverCorrection)
 gemRoutes.put("/:id/dismiss-approver-correction", protect, authorize("ADMIN"), dismissApproverCorrection)
+
+// The gem's Drive folder. Anyone working on the stone may add to it; removing is kept
+// to those who can remove its intake images. The thumbnail and stream routes are loaded
+// by <img> and <video>, which cannot send a token header, so they check the per-file
+// token the listing hands out instead of protect.
+gemRoutes.get("/:id/media", protect, listGemMedia)
+gemRoutes.post("/:id/media/uploads", protect, createGemUpload)
+gemRoutes.get("/:id/media/:fileId/thumbnail", getGemMediaThumbnail)
+gemRoutes.get("/:id/media/:fileId/stream", streamGemMedia)
+gemRoutes.delete("/:id/media/:fileId", protect, authorize("ADMIN", "HELPER"), deleteGemMedia)
 
 export default gemRoutes

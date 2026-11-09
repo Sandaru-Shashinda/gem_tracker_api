@@ -4,11 +4,8 @@ import Image from "../models/Image.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import { GEM_STATUSES, REPORT_MODES, REPORT_TYPES } from "../constants/index.js"
 import { populateGemStages } from "../services/gem.service.js"
-import { driveDownloadUrl, driveFileId } from "../utils/driveVideo.js"
-
-// Each answer carries at most this much of the video. Kept well under Vercel's 4.5 MB
-// response limit; the player simply asks for the next piece.
-const VIDEO_CHUNK_BYTES = 3 * 1024 * 1024
+import { chunkedRange, driveDownloadUrl, driveFileId, relayRange } from "../utils/driveVideo.js"
+import { fetchFileRange, isDriveConfigured } from "../services/drive.service.js"
 
 /**
  * The report list's filters, as a Report query.
@@ -338,38 +335,16 @@ export const streamReportVideo = async (req, res) => {
     const fileId = report?.videoUrl && driveFileId(report.videoUrl)
     if (!fileId) return res.status(404).json({ message: "This report has no Drive video" })
 
-    // Players ask for "bytes=start-", "bytes=start-end" or "bytes=-suffix". Every answer
-    // is capped at one chunk; a shorter 206 than was asked for is valid and the player
-    // asks again from where it ends.
-    const [, startText = "", endText = ""] = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "") || []
-    let range
-    if (!startText && endText) {
-      range = `bytes=-${Math.min(Number(endText), VIDEO_CHUNK_BYTES)}`
-    } else {
-      const start = Number(startText) || 0
-      const lastByte = start + VIDEO_CHUNK_BYTES - 1
-      range = `bytes=${start}-${endText ? Math.min(Number(endText), lastByte) : lastByte}`
-    }
+    const range = chunkedRange(req.headers.range)
 
-    const upstream = await fetch(driveDownloadUrl(fileId), { headers: { Range: range } })
-    if (upstream.status === 416) {
-      return res.status(416).set("Content-Range", upstream.headers.get("content-range") || "").end()
+    // A video picked from the gem's own Drive folder is private to the lab, and only the
+    // service account can read it. A link pasted from someone's own Drive is read the
+    // way any visitor would, which is why that one has to be shared publicly.
+    let upstream = isDriveConfigured() ? await fetchFileRange(fileId, range) : null
+    if (!upstream || [401, 403, 404].includes(upstream.status)) {
+      upstream = await fetch(driveDownloadUrl(fileId), { headers: { Range: range } })
     }
-    // Anything but a byte range means Drive refused the file (not shared publicly,
-    // downloads disabled, quota) and sent a page explaining so — not something to play.
-    if (upstream.status !== 206) {
-      return res.status(502).json({ message: "Drive did not serve the video" })
-    }
-
-    const body = Buffer.from(await upstream.arrayBuffer())
-    res.status(206).set({
-      "Content-Type": upstream.headers.get("content-type") || "video/mp4",
-      "Content-Range": upstream.headers.get("content-range"),
-      "Content-Length": String(body.length),
-      "Accept-Ranges": "bytes",
-      "Cache-Control": "public, max-age=3600",
-    })
-    res.end(body)
+    await relayRange(res, upstream, "public, max-age=3600")
   } catch (error) {
     res.status(500).json({ message: "Error streaming video", error: error.message })
   }
