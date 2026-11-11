@@ -63,3 +63,9 @@ export const POST_CATEGORIES = {
   GRC_NEWS: "grc-news",
   UNCATEGORIZED: "uncategorized",
 }
+
+/**
+ * What a tester enters for an R.I. the refractometer could not give — a negative reading.
+ * Stored as-is in riMin / riMax in place of a number, and printed as-is.
+ */
+export const RI_NOT_READ = "-"

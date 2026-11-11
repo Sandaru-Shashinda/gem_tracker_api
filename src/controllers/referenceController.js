@@ -3,6 +3,7 @@ import Gem from "../models/Gem.js"
 import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
+import HiddenSuggestion from "../models/HiddenSuggestion.js"
 
 const RI_EXPAND    = 0.5
 const SG_EXPAND    = 1.0
@@ -42,8 +43,13 @@ export const searchReferences = async (req, res) => {
     // R.I. is a range: a doubly refractive stone gives two readings, so it is scored as
     // an overlap against each reference's published R.I. range. S.G. and hardness are
     // single readings and are scored as points against theirs.
-    const riMinVal   = riMin    ? parseFloat(riMin)    : null
-    const riMaxVal   = riMax    ? parseFloat(riMax)    : null
+    // A "-" (no reading from the refractometer) is not a number and is left out of the score.
+    const finiteOrNull = (v) => {
+      const n = v ? parseFloat(v) : NaN
+      return Number.isFinite(n) ? n : null
+    }
+    const riMinVal   = finiteOrNull(riMin)
+    const riMaxVal   = finiteOrNull(riMax)
     const sgVal      = sg       ? parseFloat(sg)       : null
     const hardnessVal = hardness ? parseFloat(hardness) : null
 
@@ -165,6 +171,7 @@ export const getIdentifications = async (req, res) => {
       approvalSpecies,
       approvalVarieties,
       approvalSelected,
+      hiddenRows,
     ] = await Promise.all([
       GemReference.distinct("species"),
       GemReference.distinct("variety"),
@@ -177,6 +184,7 @@ export const getIdentifications = async (req, res) => {
       GemFinalApproval.distinct("finalObservations.species"),
       GemFinalApproval.distinct("finalObservations.variety"),
       GemFinalApproval.distinct("finalVariety"),
+      HiddenSuggestion.find({}, { field: 1, key: 1 }).lean(),
     ])
 
     // The other free-text fields are offered back the same way: whatever has been saved
@@ -215,28 +223,106 @@ export const getIdentifications = async (req, res) => {
       GemFinalApproval.distinct("colour"),
     ])
 
+    // Values taken off a dropdown on the References page stay off it.
+    const hidden = new Map()
+    for (const { field, key } of hiddenRows) {
+      if (!hidden.has(field)) hidden.set(field, new Set())
+      hidden.get(field).add(key)
+    }
+    const shown = (field, list) => {
+      const keys = hidden.get(field)
+      return keys ? list.filter((name) => !keys.has(name.toLowerCase())) : list
+    }
+
     res.json({
       history: {
-        itemDescription: mergeNames(intakeDescriptions, itemDescription),
-        comments,
-        specialNote,
-        treatment,
-        colour: mergeNames(...colours),
-        cuttingShape,
-        crownStyle,
-        pavilionStyle,
+        itemDescription: shown("itemDescription", mergeNames(intakeDescriptions, itemDescription)),
+        comments: shown("comments", comments),
+        specialNote: shown("specialNote", specialNote),
+        treatment: shown("treatment", treatment),
+        colour: shown("colour", mergeNames(...colours)),
+        cuttingShape: shown("cuttingShape", cuttingShape),
+        crownStyle: shown("crownStyle", crownStyle),
+        pavilionStyle: shown("pavilionStyle", pavilionStyle),
       },
-      species: mergeNames(refSpecies, t1Species, t2Species, approvalSpecies),
-      varieties: mergeNames(
-        refVarieties,
-        t1Varieties,
-        t1Selected,
-        t2Varieties,
-        t2Selected,
-        approvalVarieties,
-        approvalSelected,
+      species: shown("species", mergeNames(refSpecies, t1Species, t2Species, approvalSpecies)),
+      varieties: shown(
+        "varieties",
+        mergeNames(
+          refVarieties,
+          t1Varieties,
+          t1Selected,
+          t2Varieties,
+          t2Selected,
+          approvalVarieties,
+          approvalSelected,
+        ),
       ),
     })
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message })
+  }
+}
+
+/** The dropdowns a suggestion can be taken off — the keys getIdentifications answers with. */
+const SUGGESTION_FIELDS = [
+  "species",
+  "varieties",
+  "itemDescription",
+  "comments",
+  "specialNote",
+  "treatment",
+  "colour",
+  "cuttingShape",
+  "crownStyle",
+  "pavilionStyle",
+]
+
+// @desc    Suggestions taken off the dropdowns, newest first
+// @route   GET /api/references/suggestions/hidden
+// @access  Private/Admin, Helper
+export const getHiddenSuggestions = async (req, res) => {
+  try {
+    const rows = await HiddenSuggestion.find({}).sort({ createdAt: -1 }).lean()
+    res.json(rows)
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message })
+  }
+}
+
+// @desc    Take a suggestion off a dropdown. The gem records it came from are not touched.
+// @route   POST /api/references/suggestions/hidden   { field, value }
+// @access  Private/Admin, Helper
+export const hideSuggestion = async (req, res) => {
+  try {
+    const field = req.body?.field
+    const value = typeof req.body?.value === "string" ? req.body.value.trim() : ""
+    if (!SUGGESTION_FIELDS.includes(field)) {
+      return res.status(400).json({ message: "Unknown suggestion field" })
+    }
+    if (!value) return res.status(400).json({ message: "A value is required" })
+
+    const key = value.toLowerCase()
+    // Hiding it twice is the same as hiding it once.
+    const row = await HiddenSuggestion.findOneAndUpdate(
+      { field, key },
+      { $setOnInsert: { field, key, value, hiddenBy: req.user?._id } },
+      { upsert: true, new: true },
+    )
+    res.status(201).json(row)
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message })
+  }
+}
+
+// @desc    Put a hidden suggestion back on its dropdown
+// @route   DELETE /api/references/suggestions/hidden/:id
+// @access  Private/Admin, Helper
+export const restoreSuggestion = async (req, res) => {
+  try {
+    const row = await HiddenSuggestion.findByIdAndDelete(req.params.id)
+    if (!row) return res.status(404).json({ message: "Suggestion not found" })
+    res.json({ message: "Suggestion restored" })
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message })
   }

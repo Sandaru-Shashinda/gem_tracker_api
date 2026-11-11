@@ -27,6 +27,8 @@ const finalObservationsSchema = {
   comments: String,
   itemDescription: String,
   specialNote: String,
+  // The approver's own working note. Never printed on a report.
+  myNote: String,
   treatment: String,
   // Per-treatment checklist printed on the premium report. Each value is "Yes" | "No"
   // or "" / absent when the lab has not assessed it — a deliberate tri-state, since
@@ -61,8 +63,9 @@ const GemFinalApprovalSchema = new mongoose.Schema(
     // riMax is absent for a singly refractive stone and every reader treats that as
     // "the same reading as riMin". Records written while R.I. was a single value keep
     // their `ri`, which the app reads as a fallback for both ends.
-    riMin: Number,
-    riMax: Number,
+    // A reading, or "-" (RI_NOT_READ) when the refractometer gave none — a negative reading.
+    riMin: mongoose.Schema.Types.Mixed,
+    riMax: mongoose.Schema.Types.Mixed,
     ri: Number,
     sg: Number,
     // One reading — what the lab measured. The species' published hardness range lives

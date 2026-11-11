@@ -6,19 +6,26 @@ import Image from "../models/Image.js"
 import Customer from "../models/Customer.js"
 import Report from "../models/Report.js"
 import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
-import { GEM_STATUSES, REPORT_MODES, ROLES } from "../constants/index.js"
+import { GEM_STATUSES, REPORT_MODES, ROLES, RI_NOT_READ } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
 import { isDriveConfigured, trashFile } from "../services/drive.service.js"
 
 // Shared field-extraction and null-coercion for test stage updates.
 // Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
 const toNumberOrNull = (value) => (value === "" || value === null ? null : Number(value))
+// An R.I. is a number, or "-" when the refractometer gave no reading (a negative R.I.).
+// The schema no longer casts it, so anything else that is not a number is dropped here.
+const toRiOrNull = (value) => {
+  if (typeof value === "string" && value.trim() === RI_NOT_READ) return RI_NOT_READ
+  const n = toNumberOrNull(value)
+  return n === null || Number.isFinite(n) ? n : null
+}
 
 function applyTestData(stageData, body, userId) {
   const { riMin, riMax, sg, hardness, colour, weight, observations, selectedVariety } = body
   const data = { ...stageData }
-  if (riMin !== undefined) data.riMin = toNumberOrNull(riMin)
-  if (riMax !== undefined) data.riMax = toNumberOrNull(riMax)
+  if (riMin !== undefined) data.riMin = toRiOrNull(riMin)
+  if (riMax !== undefined) data.riMax = toRiOrNull(riMax)
   if (sg !== undefined) data.sg = toNumberOrNull(sg)
   if (hardness !== undefined) data.hardness = toNumberOrNull(hardness)
   if (colour !== undefined) data.colour = typeof colour === "string" ? colour.trim() : colour
@@ -487,8 +494,10 @@ export const intakeGem = async (req, res) => {
     // report somebody can write.
     const isCustom = reportMode === REPORT_MODES.CUSTOM
 
-    if (!isDraft && (!color || !weight)) {
-      return res.status(400).json({ message: "Missing required fields: color, weight" })
+    // Weight is optional at intake: the stone can be weighed later, and every test
+    // stage records its own weight.
+    if (!isDraft && !color) {
+      return res.status(400).json({ message: "Missing required field: color" })
     }
 
     // Only the first reading is compulsory. Leaving Tester 2 unassigned is a real
@@ -620,7 +629,10 @@ export const updateGem = async (req, res) => {
       if (["gemId", "test1", "test2", "finalApproval", "testerId1", "testerId2", "imageIdsToDelete"].includes(key)) return
 
       if (key === "weight") {
-        gem[key] = val === "" || val === null ? null : Number(val)
+        // A blank or 0 weight means "not weighed yet" — the intake form sends 0 for an
+        // empty box — so it is stored as null rather than as a reading of 0 ct.
+        const parsed = toNumberOrNull(val)
+        gem[key] = parsed !== null && Number.isFinite(parsed) && parsed > 0 ? parsed : null
       } else {
         gem[key] = val
       }
@@ -771,8 +783,8 @@ export const updateFinalApproval = async (req, res) => {
     const finalData = existing ? existing.toObject() : {}
     delete finalData._id
 
-    if (riMin !== undefined) finalData.riMin = toNumberOrNull(riMin)
-    if (riMax !== undefined) finalData.riMax = toNumberOrNull(riMax)
+    if (riMin !== undefined) finalData.riMin = toRiOrNull(riMin)
+    if (riMax !== undefined) finalData.riMax = toRiOrNull(riMax)
     if (sg !== undefined) finalData.sg = toNumberOrNull(sg)
     if (hardness !== undefined) finalData.hardness = toNumberOrNull(hardness)
     // The approval's own colour and weight: seeded from the gem's latest by the client,
