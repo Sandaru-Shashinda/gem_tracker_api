@@ -23,6 +23,7 @@ import {
   streamGemMedia,
   deleteGemMedia,
 } from "../controllers/mediaController.js"
+import { getGemAiInsight, createGemAiInsight } from "../controllers/aiInsightController.js"
 import { protect, authorize } from "../middleware/authMiddleware.js"
 
 const gemRoutes = express.Router()
@@ -49,6 +50,12 @@ gemRoutes.post("/:id/images", protect, authorize("ADMIN", "HELPER"), addGemImage
 gemRoutes.put("/:id/request-correction", protect, authorize("ADMIN"), requestCorrection)
 gemRoutes.put("/:id/request-approver-correction", protect, authorize("ADMIN"), requestApproverCorrection)
 gemRoutes.put("/:id/dismiss-approver-correction", protect, authorize("ADMIN"), dismissApproverCorrection)
+
+// AI suggestions for the analysis form — offered to whoever fills that form in.
+gemRoutes
+  .route("/:id/ai-insights")
+  .get(protect, authorize("TESTER", "ADMIN"), getGemAiInsight)
+  .post(protect, authorize("TESTER", "ADMIN"), createGemAiInsight)
 
 // The gem's Drive folder. Anyone working on the stone may add to it; removing is kept
 // to those who can remove its intake images. The thumbnail and stream routes are loaded

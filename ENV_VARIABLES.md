@@ -33,6 +33,17 @@ This document explains the environment variables required for the Gem Tracker AP
   - Production: Your Vercel deployment URL or custom domain
   - Example: `https://your-app.vercel.app`
 
+### Gemini (AI Insights)
+
+Optional. Without a key the AI Insights panel explains that it is not set up.
+
+- **GEMINI_API_KEY**: A key from https://aistudio.google.com/apikey (the free tier works)
+- **GEMINI_MODEL**: Optional. Default `gemini-flash-latest`
+- **GEMINI_FALLBACK_MODEL**: Optional. Used when the first model's free quota is spent. Default `gemini-flash-lite-latest`
+
+On the Hostinger VPS, add these to the API's `.env` and restart the process. Check the
+key with one real call (no database needed): `node src/scripts/test-gemini.js photo.jpg`
+
 ### Google Drive Configuration
 
 - **GOOGLE_DRIVE_CLIENT_ID**: OAuth2 Client ID from Google Cloud Console

@@ -4,103 +4,18 @@ import GemTest1 from "../models/GemTest1.js"
 import GemTest2 from "../models/GemTest2.js"
 import GemFinalApproval from "../models/GemFinalApproval.js"
 import HiddenSuggestion from "../models/HiddenSuggestion.js"
-
-const RI_EXPAND    = 0.5
-const SG_EXPAND    = 1.0
-const H_EXPAND     = 1.5
-
-const RI_DECAY_TOL = 0.05
-const SG_DECAY_TOL = 0.30
-const H_DECAY_TOL  = 1.0
-
-const WEIGHTS   = { ri: 0.40, sg: 0.35, hardness: 0.25 }
-const MIN_SCORE = 15
-
-function scorePoint(val, refMin, refMax, decayTol) {
-  if (val >= refMin && val <= refMax) return 1.0
-  const dist = val < refMin ? refMin - val : val - refMax
-  return Math.exp(-dist / decayTol)
-}
-
-function scoreRange(testMin, testMax, refMin, refMax, decayTol) {
-  if (testMin === testMax) return scorePoint(testMin, refMin, refMax, decayTol)
-  const intersection = Math.max(0, Math.min(testMax, refMax) - Math.max(testMin, refMin))
-  if (intersection > 0) {
-    const union = Math.max(testMax, refMax) - Math.min(testMin, refMin)
-    return intersection / union
-  }
-  const gap = refMin > testMax ? refMin - testMax : testMin - refMax
-  return Math.exp(-gap / decayTol)
-}
+import { scoreReferences } from "../services/referenceMatch.service.js"
 
 // @desc    Get gem references based on parameters
 // @route   GET /api/references/search
 // @access  Private
+//
+// Scoring lives in referenceMatch.service, which the AI insights share, so the two
+// panels never disagree about which species the readings still allow.
 export const searchReferences = async (req, res) => {
   try {
     const { riMin, riMax, sg, hardness } = req.query
-
-    // R.I. is a range: a doubly refractive stone gives two readings, so it is scored as
-    // an overlap against each reference's published R.I. range. S.G. and hardness are
-    // single readings and are scored as points against theirs.
-    // A "-" (no reading from the refractometer) is not a number and is left out of the score.
-    const finiteOrNull = (v) => {
-      const n = v ? parseFloat(v) : NaN
-      return Number.isFinite(n) ? n : null
-    }
-    const riMinVal   = finiteOrNull(riMin)
-    const riMaxVal   = finiteOrNull(riMax)
-    const sgVal      = sg       ? parseFloat(sg)       : null
-    const hardnessVal = hardness ? parseFloat(hardness) : null
-
-    // One reading recorded on its own stands for both ends of the range. Readings are
-    // also ordered here, since a stone can be entered high-then-low.
-    const lowRi  = riMinVal ?? riMaxVal
-    const highRi = riMaxVal ?? riMinVal
-    const effectiveRiMin = lowRi === null ? null : Math.min(lowRi, highRi)
-    const effectiveRiMax = highRi === null ? null : Math.max(lowRi, highRi)
-
-    const hasRi       = effectiveRiMin !== null
-    const hasSg       = sgVal !== null
-    const hasHardness = hardnessVal !== null
-
-    if (!hasRi && !hasSg && !hasHardness) return res.json([])
-
-    const query = {}
-    if (hasRi) {
-      query.refractiveIndexMin = { $lte: effectiveRiMax + RI_EXPAND }
-      query.refractiveIndexMax = { $gte: effectiveRiMin - RI_EXPAND }
-    }
-    if (hasSg) {
-      query.specificGravityMin = { $lte: sgVal + SG_EXPAND }
-      query.specificGravityMax = { $gte: sgVal - SG_EXPAND }
-    }
-    if (hasHardness) {
-      query.hardnessMin = { $lte: hardnessVal + H_EXPAND }
-      query.hardnessMax = { $gte: hardnessVal - H_EXPAND }
-    }
-
-    const candidates = await GemReference.find(query).lean()
-
-    const rawWeightSum = (hasRi ? WEIGHTS.ri : 0)
-                       + (hasSg ? WEIGHTS.sg : 0)
-                       + (hasHardness ? WEIGHTS.hardness : 0)
-    const wRi = hasRi       ? WEIGHTS.ri       / rawWeightSum : 0
-    const wSg = hasSg       ? WEIGHTS.sg       / rawWeightSum : 0
-    const wH  = hasHardness ? WEIGHTS.hardness / rawWeightSum : 0
-
-    const results = candidates
-      .map((ref) => {
-        let score = 0
-        if (hasRi)       score += wRi * scoreRange(effectiveRiMin, effectiveRiMax, ref.refractiveIndexMin, ref.refractiveIndexMax, RI_DECAY_TOL)
-        if (hasSg)       score += wSg * scorePoint(sgVal, ref.specificGravityMin, ref.specificGravityMax, SG_DECAY_TOL)
-        if (hasHardness) score += wH  * scorePoint(hardnessVal, ref.hardnessMin, ref.hardnessMax, H_DECAY_TOL)
-        return { ...ref, matchScore: Math.round(score * 100) }
-      })
-      .filter((ref) => ref.matchScore >= MIN_SCORE)
-      .sort((a, b) => b.matchScore - a.matchScore)
-
-    res.json(results)
+    res.json(await scoreReferences({ riMin, riMax, sg, hardness }))
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message })
   }
