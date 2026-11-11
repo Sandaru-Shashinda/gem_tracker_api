@@ -39,6 +39,7 @@ import {
 /** Bump when the prompt or schema changes, so cached answers to the old one are not reused. */
 const PROMPT_VERSION = 3
 
+// Mirrored in the app (lib/api/aiInsights.ts) so it can count the photos the AI will use.
 const MAX_INTAKE_IMAGES = 2
 const MAX_DRIVE_IMAGES = 3
 const MAX_DRIVE_IMAGE_BYTES = 20 * 1024 * 1024
@@ -507,6 +508,7 @@ const toResponse = (doc, cached) => ({
   cached,
   readings: doc.readings,
   imageCount: doc.imageCount,
+  imageSourceCount: doc.imageSourceCount ?? null,
   result: doc.result,
 })
 
@@ -536,8 +538,10 @@ export const generateInsight = async (gem, rawReadings, user) => {
     .update(JSON.stringify({ v: PROMPT_VERSION, readings, images: sources.map((s) => `${s.kind}:${s.id}`) }))
     .digest("hex")
 
-  const cached = await GemAiInsight.findOne({ gem: gem._id, inputHash }).sort({ createdAt: -1 }).lean()
-  if (cached) {
+  const found = await GemAiInsight.findOne({ gem: gem._id, inputHash }).sort({ createdAt: -1 }).lean()
+  if (found) {
+    // Same hash means the same photo list, so its length stands in on results saved before it was recorded.
+    const cached = { ...found, imageSourceCount: found.imageSourceCount ?? sources.length }
     // Recorded against this user too, so it is what they see next time they open the gem.
     if (String(cached.requestedBy) !== String(user._id)) {
       const { _id, createdAt, updatedAt, __v, ...rest } = cached
@@ -595,6 +599,7 @@ export const generateInsight = async (gem, rawReadings, user) => {
     inputHash,
     readings,
     imageCount: imageParts.length,
+    imageSourceCount: sources.length,
     model,
     result,
   })

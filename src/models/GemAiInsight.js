@@ -18,11 +18,15 @@ const GemAiInsightSchema = new mongoose.Schema(
     /** sha256 of the prompt version, the normalised readings and the photos used. */
     inputHash: { type: String, required: true },
     readings: { type: mongoose.Schema.Types.Mixed },
+    /** Photos the AI was given that it could read. */
     imageCount: Number,
+    /** Photos it was given; more than imageCount when some could not be read. */
+    imageSourceCount: Number,
     model: String,
     result: { type: mongoose.Schema.Types.Mixed },
   },
-  { timestamps: true },
+  // minimize off: a photo-less result has `fields: {}`, which Mongoose would otherwise drop.
+  { timestamps: true, minimize: false },
 )
 
 GemAiInsightSchema.index({ gem: 1, inputHash: 1 })
