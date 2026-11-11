@@ -84,6 +84,14 @@ export const createFolder = (name) =>
 
 export const getFile = (fileId, fields) => driveJson(`/files/${encodeURIComponent(fileId)}`, { fields })
 
+/** Gives a file or folder a new name, leaving its contents and links as they were. */
+export const renameFile = (fileId, name) =>
+  driveJson(`/files/${encodeURIComponent(fileId)}`, { fields: "id" }, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+
 /** Into Drive's trash, not gone: anyone with access to the Shared Drive can restore it for 30 days. */
 export const trashFile = (fileId) =>
   driveJson(`/files/${encodeURIComponent(fileId)}`, { fields: "id" }, {

@@ -8,7 +8,7 @@ import Report from "../models/Report.js"
 import { buildGemQuery, populateGemStages, resolveTest1HandOff } from "../services/gem.service.js"
 import { GEM_STATUSES, REPORT_MODES, ROLES, RI_NOT_READ } from "../constants/index.js"
 import { createReportForGem } from "../services/report.service.js"
-import { isDriveConfigured, trashFile } from "../services/drive.service.js"
+import { isDriveConfigured, renameFile, trashFile } from "../services/drive.service.js"
 
 // Shared field-extraction and null-coercion for test stage updates.
 // Keeps updateTest1 and updateTest2 from duplicating the same ~50 lines.
@@ -570,6 +570,24 @@ export const updateGem = async (req, res) => {
 
     if (!gem) return res.status(404).json({ message: "Gem not found" })
 
+    // The GRC number can be corrected after intake. Everything else — stages, reports,
+    // media — points at the gem's _id, so only the number itself has to change.
+    let renamedFrom = null
+    if (req.body.gemId !== undefined) {
+      const nextGemId = String(req.body.gemId).trim()
+      if (!nextGemId) {
+        return res.status(400).json({ message: "GRC Number is required" })
+      }
+      if (nextGemId !== gem.gemId) {
+        const duplicate = await Gem.exists({ gemId: nextGemId, _id: { $ne: gem._id } })
+        if (duplicate) {
+          return res.status(400).json({ message: "A gem with this GRC Number already exists" })
+        }
+        renamedFrom = gem.gemId
+        gem.gemId = nextGemId
+      }
+    }
+
     if (req.body.imageIds && Array.isArray(req.body.imageIds)) {
       gem.images = req.body.imageIds
     }
@@ -651,6 +669,15 @@ export const updateGem = async (req, res) => {
     }
 
     const updatedGem = await gem.save()
+
+    // The Drive folder is named after the GRC number, so it follows a correction. Its
+    // name is only a label — files are found by folder id — so a failure is only logged.
+    if (renamedFrom && gem.driveFolderId && isDriveConfigured()) {
+      await renameFile(gem.driveFolderId, gem.gemId).catch((error) =>
+        console.error("Could not rename the gem's Drive folder:", error),
+      )
+    }
+
     await updatedGem.populate("currentAssignee", "name role")
     await updatedGem.populate("intake.helperId", "name role")
 
@@ -847,6 +874,9 @@ export const deleteGem = async (req, res) => {
       GemTest1.deleteOne({ gemId: gem._id }),
       GemTest2.deleteOne({ gemId: gem._id }),
       GemFinalApproval.deleteOne({ gemId: gem._id }),
+      // A report without its gem has nothing to print and breaks the reports list,
+      // which reads each report's gem.
+      Report.deleteMany({ gemId: gem._id }),
     ])
 
     // Into Drive's trash, where it can still be restored for 30 days. A Drive outage
